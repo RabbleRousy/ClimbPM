@@ -2,10 +2,16 @@
 #include <vector>
 #include <sstream>
 
-#include <opencv2/opencv.hpp>			// checked at opencv 3.4.1
+#include <opencv2/opencv.hpp>           // checked at opencv 3.4.1
 #include <opencv2/structured_light.hpp>	// opencv contrib version
 #include <fstream>
+// Different filesystem calls depending on OS
 #include <filesystem>
+#ifdef __APPLE__
+namespace fs = std::__fs::filesystem;
+#else
+namespace fs = std::filesystem;
+#endif
 
 #define PROJECTORWIDTH 1920
 #define PROJECTORHEIGHT 1080
@@ -99,7 +105,7 @@ int main()
     // --------------------------------
     // ----- Capture the graycode -----
     // --------------------------------
-    std::filesystem::create_directory("captured");
+    fs::create_directory("captured");
     std::vector<cv::Mat> captured;
     for (int i = 0; i < graycodes.size(); i++) {
         auto gimg = graycodes[i];

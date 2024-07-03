@@ -84,4 +84,6 @@ encodings.xml
 misc.xml
 modules.xml
 vcs.xml
+# Old and new name
 ProjectionMapping.iml
+ClimbPM.iml
