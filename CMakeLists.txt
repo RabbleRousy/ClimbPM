@@ -1,5 +1,7 @@
-cmake_minimum_required(VERSION 2.8.12)
+cmake_minimum_required(VERSION 3.28)
 project(ClimbPM)
+
+set(CMAKE_CXX_STANDARD 17)
 
 # OpenCV_DIR has to be set as system environment variable.
 message(STATUS "OpenCV_DIR is " $ENV{OpenCV_DIR})
