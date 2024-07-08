@@ -87,3 +87,4 @@ vcs.xml
 # Old and new name
 ProjectionMapping.iml
 ClimbPM.iml
+.DS_Store
