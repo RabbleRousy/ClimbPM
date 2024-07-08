@@ -9,5 +9,7 @@ set(OpenCV_DIR $ENV{OpenCV_DIR})
 find_package(OpenCV REQUIRED COMPONENTS core imgproc highgui structured_light)
 
 include_directories(${OpenCV_INCLUDE_DIRS}) # not needed for opencv>=4.0
-add_executable(ClimbPM main.cpp)
+add_executable(ClimbPM main.cpp
+        ProjectorConfig.cpp
+        ProjectorConfig.h)
 target_link_libraries(ClimbPM ${OpenCV_LIBS})
