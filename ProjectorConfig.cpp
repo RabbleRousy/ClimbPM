@@ -113,7 +113,7 @@ Mat ProjectorConfig::decodeGraycode() {
     c2pList = std::vector<C2P>();
 
     // Decode each pixel
-    uint pxlCount, thresholdFailCount, projPxlCount, mappedPxlCount = 0;
+    uint pxlCount = 0, thresholdFailCount = 0, projPxlCount = 0, mappedPxlCount = 0;
     for (int y = 0; y < camHeight; y++) {
         for (int x = 0; x < camWidth; x++) {
             cv::Point pixel;
@@ -181,4 +181,28 @@ void ProjectorConfig::computeHomography() {
 }
 
 ProjectorConfig::ProjectorConfig(ProjectorParams p) : params(p) {}
+
+void ProjectorConfig::projectImage(const Mat &img) {
+    // Warp the image with the homography matrix
+    Size resolution(params.width, params.height);
+    Mat warpedImage;
+    warpPerspective(img, warpedImage, homography, resolution);
+
+    // Create projector window
+    std::string windowName = "Projector" + std::to_string(params.id);
+    namedWindow(windowName, WINDOW_NORMAL);
+    resizeWindow(windowName, params.width, params.height);
+    moveWindow(windowName, params.posX, params.posY);
+    setWindowProperty(windowName, WND_PROP_FULLSCREEN, WINDOW_FULLSCREEN);
+
+    // Display warped image on the projector
+    imshow(windowName, warpedImage);
+    waitKey(100);
+    // Display what the camera sees on the default monitor
+    initCamera();
+    waitKey(100);
+    auto camImg = getCameraImage();
+    imshow("camera", camImg);
+    waitKey(0);
+}
 
