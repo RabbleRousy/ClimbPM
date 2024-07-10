@@ -8,6 +8,8 @@
 #include <vector>
 #include <opencv2/opencv.hpp>
 #include <opencv2/structured_light.hpp>
+#include <glad/glad.h>
+#include <glfw/glfw3.h>
 #include <fstream>
 #include <filesystem>
 #ifdef __APPLE__
@@ -64,6 +66,8 @@ public:
 
 private:
     static VideoCapture camera;
+    // GLFW Window
+    GLFWwindow* window;
     // Parameters of this projector
     ProjectorParams params;
     Ptr<structured_light::GrayCodePattern> pattern;
@@ -76,8 +80,16 @@ private:
     // Homography matrix computed from c2p list
     Mat homography;
     void computeHomography();
+    bool initWindow();
     static void initCamera();
     static Mat getCameraImage();
+    // ------- OpenGL Functions ----------
+    unsigned int createVertexBuffer();
+    unsigned int createElementBuffer();
+    unsigned int createVertexArray(unsigned int vertexBuffer, unsigned int elementBuffer);
+    unsigned int createVertexShader();
+    unsigned int createFragmentShader();
+    unsigned int createShaderProgram();
 };
 
 
