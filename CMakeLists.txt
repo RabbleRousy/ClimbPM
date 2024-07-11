@@ -12,9 +12,9 @@ find_package(OpenCV REQUIRED COMPONENTS core imgproc highgui structured_light)
 # Find OpenGL
 find_package(OpenGL REQUIRED)
 
-# Include directory for glfw, glad
-set(GLOBAL_INCLUDE_DIR "/Users/hetzer/Coding/C++/Include")
-
+# Include directory for GLFW & GLAD
+message(STATUS "Include_DIR is " $ENV{Include_DIR})
+set(GLOBAL_INCLUDE_DIR $ENV{Include_DIR})
 # Including GLFW
 add_subdirectory(${GLOBAL_INCLUDE_DIR}/glfw ${GLOBAL_INCLUDE_DIR}/glfw/bin)
 include_directories(glfw/include)
