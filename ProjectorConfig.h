@@ -23,6 +23,10 @@ namespace fs = std::filesystem;
 #define WHITETHRESHOLD 5
 #define BLACKTHRESHOLD 10
 
+// Shader code (nothing fancy, basic texturing)
+#define VERTEXSHADERSOURCE "#version 330 core\nlayout (location = 0) in vec3 aPos;\nlayout (location = 1) in vec2 aTexCoord;\nout vec2 texCoord;\nvoid main()\n{\ngl_Position = vec4(aPos, 1.0);\ntexCoord = aTexCoord;\n}\0"
+#define FRAGMENTSHADERSOURCE "#version 330 core\nout vec4 FragColor;\nin vec2 texCoord;\nuniform sampler2D ourTexture;\nvoid main()\n{\nFragColor = texture(ourTexture, texCoord);\n}\n"
+
 using namespace cv;
 
 // Camera to Projector
@@ -87,8 +91,7 @@ private:
     unsigned int createVertexBuffer();
     unsigned int createElementBuffer();
     unsigned int createVertexArray(unsigned int vertexBuffer, unsigned int elementBuffer);
-    unsigned int createVertexShader();
-    unsigned int createFragmentShader();
+    unsigned int compileShader(const char* shaderSource, int shaderType);
     unsigned int createShaderProgram();
 };
 

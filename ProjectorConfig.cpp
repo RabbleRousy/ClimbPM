@@ -180,7 +180,7 @@ void ProjectorConfig::computeHomography() {
     homography = findHomography(cameraPoints, projectorPoints, RANSAC);
 }
 
-ProjectorConfig::ProjectorConfig(ProjectorParams p) : params(p) {}
+ProjectorConfig::ProjectorConfig(ProjectorParams p) : params(p), window(nullptr) {}
 
 void ProjectorConfig::projectImage(const Mat &img) {
     // Make sure we have a window for the projector
@@ -254,7 +254,7 @@ bool ProjectorConfig::initWindow() {
         return false;
     }
     // Create window
-    window = glfwCreateWindow(params.width, params.height, "Projector", monitors[params.id], NULL);
+    window = glfwCreateWindow(params.width, params.height, "Projector", monitors[params.id], nullptr);
     if (!window) {
         std::cerr << "Could not create GLFW window!" << std::endl;
         return false;
@@ -329,62 +329,26 @@ unsigned int ProjectorConfig::createVertexArray(unsigned int vertexBuffer, unsig
     return VAO;
 }
 
-unsigned int ProjectorConfig::createVertexShader() {
-    const char* vertexShaderSource = "#version 330 core\n"
-                                     "layout (location = 0) in vec3 aPos;\n"
-                                     "layout (location = 1) in vec2 aTexCoord;\n"
-                                     "out vec2 texCoord;\n"
-                                     "void main()\n"
-                                     "{\n"
-                                     "  gl_Position = vec4(aPos, 1.0);\n"
-                                     "  texCoord = aTexCoord;\n"
-                                     "}\0";
-    // Create OpenGL shader object and save its ID
-    unsigned int vertexShader;
-    vertexShader = glCreateShader(GL_VERTEX_SHADER);
+unsigned int ProjectorConfig::compileShader(const char* shaderSource, int shaderType) {
+    unsigned int shader;
+    shader = glCreateShader(shaderType);
     // Attach shader source code and compile
-    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-    glCompileShader(vertexShader);
+    glShaderSource(shader, 1, &shaderSource, nullptr);
+    glCompileShader(shader);
     // Check if compilation was successful
     int success;
     char infoLog[512];
-    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
     if (!success) {
-        glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-        std::cerr << "ERROR! Vertex shader compilation failed. Log:\n" << infoLog << std::endl;
+        glGetShaderInfoLog(shader, 512, nullptr, infoLog);
+        std::cerr << "ERROR! Shader compilation failed. Log:\n" << infoLog << std::endl;
     }
-    return vertexShader;
-}
-
-unsigned int ProjectorConfig::createFragmentShader() {
-    const char* fragmentShaderSource = "#version 330 core\n"
-                                       "out vec4 FragColor;\n"
-                                       "in vec2 texCoord;\n"
-                                       "uniform sampler2D ourTexture;\n"
-                                       "void main()\n"
-                                       "{\n"
-                                       "    FragColor = texture(ourTexture, texCoord);\n"
-                                       "}\n";
-    // Create Fragment Shader Object and save its ID
-    unsigned int fragmentShader;
-    fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    // Attach shader source and compile
-    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-    glCompileShader(fragmentShader);
-    // Check for compilation errors
-    int success;
-    char infoLog[512];
-    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-        std::cerr << "ERROR! Fragment shader compilation failed. Log:\n" << infoLog << std::endl;
-    }
-    return fragmentShader;
+    return shader;
 }
 
 unsigned int ProjectorConfig::createShaderProgram() {
-    unsigned int vertexShader = createVertexShader();
-    unsigned int fragmentShader = createFragmentShader();
+    unsigned int vertexShader = compileShader(VERTEXSHADERSOURCE, GL_VERTEX_SHADER);
+    unsigned int fragmentShader = compileShader(FRAGMENTSHADERSOURCE, GL_FRAGMENT_SHADER);
 
     // Create an OpenGL shader program object and save its ID
     unsigned int shaderProgram;
