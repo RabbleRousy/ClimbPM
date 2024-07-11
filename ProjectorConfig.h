@@ -22,6 +22,7 @@ namespace fs = std::filesystem;
 #define GRAYCODEHEIGHTSTEP 50
 #define WHITETHRESHOLD 5
 #define BLACKTHRESHOLD 10
+#define PATTERN_DELAY 500
 
 // Shader code (nothing fancy, basic texturing)
 #define VERTEXSHADERSOURCE "#version 330 core\nlayout (location = 0) in vec3 aPos;\nlayout (location = 1) in vec2 aTexCoord;\nout vec2 texCoord;\nvoid main()\n{\ngl_Position = vec4(aPos, 1.0);\ntexCoord = aTexCoord;\n}\0"
@@ -52,6 +53,7 @@ struct ProjectorParams {
     uint posY;
     ProjectorParams(ushort id, uint w, uint h, uint x, uint y)
     : id(id), width(w), height(h), posX(x), posY(y) { }
+    ProjectorParams() : id(0), width(0), height(0), posX(0), posY(0) {}
 };
 
 class ProjectorConfig {
@@ -67,6 +69,7 @@ public:
     Mat getHomography();
     void projectImage(const Mat& img);
     explicit ProjectorConfig(ProjectorParams p);
+    explicit ProjectorConfig(uint id);
 
 private:
     static VideoCapture camera;

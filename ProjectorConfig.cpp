@@ -59,7 +59,7 @@ void ProjectorConfig::captureGraycodes() {
         // Display the graycode
         Mat& gimg = graycodes[i];
         imshow("Pattern", gimg);
-        waitKey(5000);
+        waitKey(PATTERN_DELAY);
 
         Mat img = getCameraImage();
         // Convert to grayscale
@@ -226,6 +226,7 @@ void ProjectorConfig::projectImage(const Mat &img) {
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, warpedImage.cols, warpedImage.rows, 0, GL_BGR, GL_UNSIGNED_BYTE, warpedImage.ptr());
         // Render
         glClear(GL_COLOR_BUFFER_BIT);
+        glUseProgram(shader);
         glBindTexture(GL_TEXTURE_2D, texture);
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
@@ -246,9 +247,16 @@ bool ProjectorConfig::initWindow() {
         std::cerr << "GLFW could not be initialized!" << std::endl;
         return false;
     }
+    // Window hints
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // For macOS compatibility
+
     // Get monitor
     int count;
     GLFWmonitor** monitors = glfwGetMonitors(&count);
+
     if (params.id >= count) {
         std::cerr << "No monitor with id " << params.id << " found!" << std::endl;
         return false;
@@ -259,6 +267,8 @@ bool ProjectorConfig::initWindow() {
         std::cerr << "Could not create GLFW window!" << std::endl;
         return false;
     }
+    // Set window position
+    glfwSetWindowPos(window,params.posX, params.posY);
     return true;
 }
 
@@ -368,5 +378,19 @@ unsigned int ProjectorConfig::createShaderProgram() {
     glDeleteShader(vertexShader);
     glDeleteShader(fragmentShader);
     return shaderProgram;
+}
+
+ProjectorConfig::ProjectorConfig(uint id) : window(nullptr) {
+    int count;
+    auto monitors = glfwGetMonitors(&count);
+    if (id >= count) {
+        std::cerr << "Tried initializing projector with ID " << id << ", but that monitor does not exist!" << std::endl;
+    }
+
+    GLFWmonitor* monitor = monitors[id];
+    const GLFWvidmode* vidMode = glfwGetVideoMode(monitor);
+    int xPos, yPos;
+    glfwGetMonitorPos(monitor, &xPos, &yPos);
+    params = ProjectorParams(id, vidMode->width, vidMode->height, xPos, yPos);
 }
 
