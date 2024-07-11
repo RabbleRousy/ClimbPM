@@ -193,11 +193,12 @@ void ProjectorConfig::projectImage(const Mat &img) {
 
     // Warp the image with the homography matrix
     Size resolution(params.width, params.height);
-    Mat warpedImage;
-    warpPerspective(img, warpedImage, homography, resolution);
+    Mat warpedImage = img;
+    //warpPerspective(img, warpedImage, homography, resolution);
 
     // Create projector window
     glfwMakeContextCurrent(window);
+
     // glad: load all OpenGL function pointers
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {
@@ -221,7 +222,7 @@ void ProjectorConfig::projectImage(const Mat &img) {
     // Display warped image on the projector
     while (!glfwWindowShouldClose(window)) {
         // Flip vertically
-        flip(warpedImage, warpedImage, 0);
+        //flip(warpedImage, warpedImage, 0);
         // Upload the image to the texture
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, warpedImage.cols, warpedImage.rows, 0, GL_BGR, GL_UNSIGNED_BYTE, warpedImage.ptr());
         // Render
@@ -242,25 +243,21 @@ void ProjectorConfig::projectImage(const Mat &img) {
 }
 
 bool ProjectorConfig::initWindow() {
-    // Init GLFW
-    if (!glfwInit()) {
-        std::cerr << "GLFW could not be initialized!" << std::endl;
-        return false;
-    }
+    // Get monitor
+    int count;
+    GLFWmonitor** monitors = glfwGetMonitors(&count);
+    const GLFWvidmode* videoMode = glfwGetVideoMode(monitors[params.id]);
+
     // Window hints
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // For macOS compatibility
+    glfwWindowHint(GLFW_RED_BITS, videoMode->redBits);
+    glfwWindowHint(GLFW_GREEN_BITS, videoMode->greenBits);
+    glfwWindowHint(GLFW_BLUE_BITS, videoMode->blueBits);
+    glfwWindowHint(GLFW_REFRESH_RATE, videoMode->refreshRate);
 
-    // Get monitor
-    int count;
-    GLFWmonitor** monitors = glfwGetMonitors(&count);
-
-    if (params.id >= count) {
-        std::cerr << "No monitor with id " << params.id << " found!" << std::endl;
-        return false;
-    }
     // Create window
     window = glfwCreateWindow(params.width, params.height, "Projector", monitors[params.id], nullptr);
     if (!window) {
