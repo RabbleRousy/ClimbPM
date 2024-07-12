@@ -5,6 +5,11 @@
 #include "ProjectorConfig.h"
 
 VideoCapture ProjectorConfig::camera;
+unsigned int ProjectorConfig::VAO;
+unsigned int ProjectorConfig::EBO;
+unsigned int ProjectorConfig::VBO;
+unsigned int ProjectorConfig::shader;
+GLuint ProjectorConfig::texture;
 
 void ProjectorConfig::generateGraycodes() {
     // Create pattern object
@@ -183,14 +188,6 @@ void ProjectorConfig::computeHomography() {
 ProjectorConfig::ProjectorConfig(ProjectorParams p) : params(p), window(nullptr) {}
 
 void ProjectorConfig::projectImage(const Mat &img) {
-    // Make sure we have a window for the projector
-    if (!window) {
-        if (!initWindow()) {
-            std::cerr << "Failed to create a window to project the image to!" << std::endl;
-            return;
-        }
-    }
-
     // Warp the image with the homography matrix
     Size resolution(params.width, params.height);
     Mat warpedImage = img;
@@ -199,73 +196,69 @@ void ProjectorConfig::projectImage(const Mat &img) {
     // Create projector window
     glfwMakeContextCurrent(window);
 
-    // glad: load all OpenGL function pointers
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
-    {
-        std::cerr << "Failed to initialize GLAD" << std::endl;
-        return;
-    }
-    // Create buffer objects, array object and linked shader program
-    unsigned int VBO = createVertexBuffer();
-    unsigned int EBO = createElementBuffer();
-    unsigned int VAO = createVertexArray(VBO, EBO);
-    unsigned int shader = createShaderProgram();
-    // Prepare texture
-    GLuint texture;
-    glGenTextures(1, &texture);
+    // Flip vertically
+    //flip(warpedImage, warpedImage, 0);
+    // Upload the image to the texture
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, warpedImage.cols, warpedImage.rows, 0, GL_BGR, GL_UNSIGNED_BYTE, warpedImage.ptr());
+    // Render
+    glClear(GL_COLOR_BUFFER_BIT);
+    glUseProgram(shader);
     glBindTexture(GL_TEXTURE_2D, texture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glBindVertexArray(VAO);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
-    // Display warped image on the projector
-    while (!glfwWindowShouldClose(window)) {
-        // Flip vertically
-        //flip(warpedImage, warpedImage, 0);
-        // Upload the image to the texture
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, warpedImage.cols, warpedImage.rows, 0, GL_BGR, GL_UNSIGNED_BYTE, warpedImage.ptr());
-        // Render
-        glClear(GL_COLOR_BUFFER_BIT);
-        glUseProgram(shader);
-        glBindTexture(GL_TEXTURE_2D, texture);
-        glBindVertexArray(VAO);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-        // Swap front and back buffers
-        glfwSwapBuffers(window);
-        // Poll for and process events
-        glfwPollEvents();
-        if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-            glfwSetWindowShouldClose(window, true);
-    }
-    glfwDestroyWindow(window);
-    glfwTerminate();
+    // Swap front and back buffers
+    glfwSwapBuffers(window);
+    glfwPollEvents();
+    // Queried by managing application
+    shouldClose = glfwWindowShouldClose(window);
 }
 
-bool ProjectorConfig::initWindow() {
+bool ProjectorConfig::initWindow(GLFWwindow* shared) {
     // Get monitor
     int count;
     GLFWmonitor** monitors = glfwGetMonitors(&count);
-    const GLFWvidmode* videoMode = glfwGetVideoMode(monitors[params.id]);
-
-    // Window hints
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // For macOS compatibility
-    glfwWindowHint(GLFW_RED_BITS, videoMode->redBits);
-    glfwWindowHint(GLFW_GREEN_BITS, videoMode->greenBits);
-    glfwWindowHint(GLFW_BLUE_BITS, videoMode->blueBits);
-    glfwWindowHint(GLFW_REFRESH_RATE, videoMode->refreshRate);
 
     // Create window
-    window = glfwCreateWindow(params.width, params.height, "Projector", monitors[params.id], nullptr);
+    window = glfwCreateWindow(params.width, params.height, "Projector", nullptr, shared);
     if (!window) {
         std::cerr << "Could not create GLFW window!" << std::endl;
         return false;
     }
     // Set window position
     glfwSetWindowPos(window,params.posX, params.posY);
+    // Set event callbacks
+    glfwSetKeyCallback(window, keyCallback);
+
+    glfwMakeContextCurrent(window);
+
+    // Either we have shared state or we need to create it
+    if (shared == nullptr) {
+        std::cout << "No shared OpenGL context, creating..." << std::endl;
+        // glad: load all OpenGL function pointers
+        if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+        {
+            std::cerr << "Failed to initialize GLAD" << std::endl;
+            return false;
+        }
+
+        // Prepare texture
+        glEnable(GL_TEXTURE_2D);
+        glGenTextures(1, &texture);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+        // Create buffer objects, array object and linked shader program
+        VBO = createVertexBuffer();
+        EBO = createElementBuffer();
+        shader = createShaderProgram();
+    }
+    // Buffers objects only need to be created once and are shared, but context state needs to be set for each context
+    VAO = createVertexArray(VBO, EBO);
+
     return true;
 }
 
@@ -377,7 +370,7 @@ unsigned int ProjectorConfig::createShaderProgram() {
     return shaderProgram;
 }
 
-ProjectorConfig::ProjectorConfig(uint id) : window(nullptr) {
+ProjectorConfig::ProjectorConfig(uint id, const ProjectorConfig* shared) : window(nullptr), shouldClose(false) {
     int count;
     auto monitors = glfwGetMonitors(&count);
     if (id >= count) {
@@ -389,5 +382,31 @@ ProjectorConfig::ProjectorConfig(uint id) : window(nullptr) {
     int xPos, yPos;
     glfwGetMonitorPos(monitor, &xPos, &yPos);
     params = ProjectorParams(id, vidMode->width, vidMode->height, xPos, yPos);
+    std::cout << "Creating full screen window on monitor #" << id << " (" << vidMode->width << " x " << vidMode->height << " px) at "
+            << xPos << "/" << yPos << std::endl;
+
+    initWindow((shared == nullptr) ? nullptr : shared->window);
+}
+
+bool ProjectorConfig::initGLFW() {
+    glfwSetErrorCallback(errorCallback);
+    if (!glfwInit())
+        return false;
+
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // For macOS compatibility
+
+    return true;
+}
+
+void ProjectorConfig::errorCallback(int error, const char* description) {
+    std::cerr << "GLFW Error (" << error << "): " << description << std::endl;
+}
+
+void ProjectorConfig::keyCallback(GLFWwindow *window, int key, int scandone, int action, int mods) {
+    if (action == GLFW_PRESS && key == GLFW_KEY_ESCAPE)
+        glfwSetWindowShouldClose(window, GLFW_TRUE);
 }
 

@@ -58,6 +58,8 @@ struct ProjectorParams {
 
 class ProjectorConfig {
 public:
+    static bool initGLFW();
+    bool shouldClose;
     // Generates the graycode pattern object and images to be projected
     void generateGraycodes();
     // Projects the graycode pattern and saves captured images
@@ -69,12 +71,16 @@ public:
     Mat getHomography();
     void projectImage(const Mat& img);
     explicit ProjectorConfig(ProjectorParams p);
-    explicit ProjectorConfig(uint id);
+    explicit ProjectorConfig(uint id, const ProjectorConfig* shared = nullptr);
 
 private:
     static VideoCapture camera;
     // GLFW Window
     GLFWwindow* window;
+    // Shared OpenGL resources
+    static unsigned int EBO, VBO, VAO;
+    static unsigned int shader;
+    static GLuint texture;
     // Parameters of this projector
     ProjectorParams params;
     Ptr<structured_light::GrayCodePattern> pattern;
@@ -87,7 +93,9 @@ private:
     // Homography matrix computed from c2p list
     Mat homography;
     void computeHomography();
-    bool initWindow();
+    bool initWindow(GLFWwindow* shared = nullptr);
+    static void errorCallback(int error, const char* description);
+    static void keyCallback(GLFWwindow* window, int key, int scandone, int action, int mods);
     static void initCamera();
     static Mat getCameraImage();
     // ------- OpenGL Functions ----------

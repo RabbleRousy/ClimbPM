@@ -1,30 +1,19 @@
 #include "ProjectorConfig.h"
 
-void errorCallback(int error, const char* description) {
-    std::cerr << "GLFW Error (" << error << "): " << description << std::endl;
-}
-
 int main()
 {
-    glfwInit();
-    glfwSetErrorCallback(errorCallback);
+    if (!ProjectorConfig::initGLFW()) return -1;
+
     // Define the projector configuration
-    ProjectorConfig projector1 = ProjectorConfig(2);
+    ProjectorConfig projector1 = ProjectorConfig(1);
+    ProjectorConfig projector2 = ProjectorConfig(2, &projector1);
 
-    /*
-    // Graycode patterns NEEDS to be generated, even when loading from disk!!
-    projector1.generateGraycodes();
-    // Either capture or load graycode images from this projector
-    //projector1.captureGraycodes();
-    projector1.loadGraycodes();
-    // Decode (optionally retrieve visualization matrix
-    projector1.decodeGraycode();
-
-    std::cout << "Homography Matrix:\n" << projector1.getHomography() << std::endl;
-    */
     auto testImg = imread("../Resources/test-image.jpg");
-    projector1.projectImage(testImg);
-
+    while (!projector1.shouldClose && !projector2.shouldClose) {
+        projector1.projectImage(testImg);
+        projector2.projectImage(testImg);
+    }
+    glfwTerminate();
     return 0;
 }
 
