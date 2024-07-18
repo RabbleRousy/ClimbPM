@@ -5,6 +5,7 @@
 #include "ProjectorConfig.h"
 
 VideoCapture ProjectorConfig::camera;
+uint ProjectorConfig::CAMWIDTH, ProjectorConfig::CAMHEIGHT;
 unsigned int ProjectorConfig::VAO;
 unsigned int ProjectorConfig::EBO;
 unsigned int ProjectorConfig::VBO;
@@ -34,6 +35,9 @@ void ProjectorConfig::generateGraycodes() {
 void ProjectorConfig::initCamera() {
     camera = VideoCapture(0, CAP_DSHOW);
     assert(camera.isOpened());
+    auto testImg = getCameraImage();
+    CAMHEIGHT = testImg.rows;
+    CAMWIDTH = testImg.cols;
 }
 
 Mat ProjectorConfig::getCameraImage() {
@@ -111,16 +115,13 @@ Mat ProjectorConfig::decodeGraycode() {
     Mat black = captured.back();
     captured.pop_back();
 
-    int camHeight = captured[0].rows;
-    int camWidth = captured[0].cols;
-
-    Mat viz = Mat::zeros(camHeight, camWidth, CV_8UC3);
+    Mat viz = Mat::zeros(CAMHEIGHT, CAMWIDTH, CV_8UC3);
     c2pList = std::vector<C2P>();
 
     // Decode each pixel
     uint pxlCount = 0, thresholdFailCount = 0, projPxlCount = 0, mappedPxlCount = 0;
-    for (int y = 0; y < camHeight; y++) {
-        for (int x = 0; x < camWidth; x++) {
+    for (int y = 0; y < CAMHEIGHT; y++) {
+        for (int x = 0; x < CAMWIDTH; x++) {
             cv::Point pixel;
             pxlCount++;
             bool thresholdPassed = white.at<cv::uint8_t>(y, x) - black.at<cv::uint8_t>(y, x) >
@@ -131,10 +132,8 @@ Mat ProjectorConfig::decodeGraycode() {
             if (thresholdPassed && projPixel)
             {
                 mappedPxlCount++;
-                viz.at<cv::Vec3b>(y,x)[0] = ((float) pixel.x / params.width) * 255;
-                viz.at<cv::Vec3b>(y,x)[1] = ((float) pixel.y / params.height) * 255;
-                c2pList.push_back(C2P(x, y, pixel.x,
-                                      pixel.y));
+                viz.at<cv::Vec3b>(y,x)[0] = pixel.x;
+                viz.at<cv::Vec3b>(y,x)[1] = pixel.y;
             }
         }
     }
@@ -146,6 +145,13 @@ Mat ProjectorConfig::decodeGraycode() {
 
     std::cout << mappedPxlCount << " of " << pxlCount <<
               " pixels (" << (float)(mappedPxlCount) / pxlCount * 100.0f << " %) were successfully mapped." << std::endl;
+
+    viz = reduceCalibrationNoise(viz);
+    for (int y = 0; y < CAMHEIGHT; y++) {
+        for (int x = 0; x < CAMWIDTH; x++) {
+            c2pList.push_back(C2P(x, y, viz.at<Vec3b>(y,x)[0], viz.at<Vec3b>(y,x)[1]));
+        }
+    }
 
     // Save C2P as file
     std::ofstream os("captured" + std::to_string(params.id) + "/c2p.csv");
@@ -159,6 +165,20 @@ Mat ProjectorConfig::decodeGraycode() {
         std::cerr << "Error saving result image!" << std::endl;
 
     return viz;
+}
+
+Mat ProjectorConfig::reduceCalibrationNoise(const Mat& calib) {
+    Mat eroded, dilated;
+    int morphSize = 1;
+    auto kernelSize1 = getStructuringElement(MORPH_RECT, Size(2 * morphSize + 1, 2 * morphSize + 1), Point(morphSize, morphSize));
+    morphSize = 2;
+    auto kernelSize2 = getStructuringElement(MORPH_RECT, Size(2 * morphSize + 1, 2 * morphSize + 1), Point(morphSize, morphSize));
+    morphSize = 3;
+    auto kernelSize3 = getStructuringElement(MORPH_RECT, Size(2 * morphSize + 1, 2 * morphSize + 1), Point(morphSize, morphSize));
+
+    cv::dilate(calib, dilated, kernelSize3);
+    cv::erode(dilated, eroded, kernelSize2);
+    return eroded;
 }
 
 Mat ProjectorConfig::getHomography() {
@@ -186,6 +206,8 @@ void ProjectorConfig::computeHomography() {
 }
 
 ProjectorConfig::ProjectorConfig(ProjectorParams p) : params(p), window(nullptr) {}
+
+ProjectorConfig::ProjectorConfig() : params(ProjectorParams()), window(nullptr) {}
 
 void ProjectorConfig::projectImage(const Mat &img) {
     // Warp the image with the homography matrix
@@ -408,5 +430,54 @@ void ProjectorConfig::errorCallback(int error, const char* description) {
 void ProjectorConfig::keyCallback(GLFWwindow *window, int key, int scandone, int action, int mods) {
     if (action == GLFW_PRESS && key == GLFW_KEY_ESCAPE)
         glfwSetWindowShouldClose(window, GLFW_TRUE);
+}
+
+void ProjectorConfig::computeContributions(ProjectorConfig *projectors, int count) {
+    // Initialize 2 dimensional arrays for contribution matrix
+    for (int i = 0; i < count; i++) {
+        projectors[i].contributionMatrix = new float*[CAMWIDTH];
+        for (int x = 0; x < CAMWIDTH; x++) {
+            projectors[i].contributionMatrix[x] = new float[CAMHEIGHT];
+        }
+    }
+
+    // CAREFUL! Looping over C2PList assumes they are all in the same order, CONFIRM THIS!!
+    for (int pxl = 0; pxl < projectors[0].c2pList.size(); pxl++) {
+        uint contributorsCount = 0;
+        Point pixel(projectors[0].c2pList[pxl].cx, projectors[0].c2pList[pxl].cy);
+        // Loop over all projectors and check if they contribute to the pixel
+        for (int i = 0; i < count; i++) {
+            if (projectors[i].c2pList[pxl].px + projectors[i].c2pList[pxl].py != 0) {
+                // This projector contributes to the camera pixel
+                contributorsCount++;
+            }
+        }
+        float contribution = contributorsCount == 0 ? 0.0f : 1.0f / contributorsCount;
+        // Loop over all projectors and set the pixel's contribution value
+        for (int i = 0; i < count; i++) {
+            projectors[i].contributionMatrix[pixel.x][pixel.y] = contribution;
+        }
+    }
+}
+
+void ProjectorConfig::visualizeContribution() {
+    // For testing: visualize contribution
+    Mat viz = Mat::zeros(CAMWIDTH, CAMHEIGHT, CV_8UC1);
+    for (int x = 0; x < CAMWIDTH; x++) {
+        for (int y = 0; y < CAMHEIGHT; y++) {
+            viz.at<float>(x,y) = contributionMatrix[x][y];
+        }
+    }
+    imshow("Contribution Projector" + std::to_string(params.id), viz);
+    waitKey(0);
+}
+
+ProjectorConfig::~ProjectorConfig() {
+    if (contributionMatrix != nullptr) {
+        for (int x = 0; x < CAMWIDTH; x++) {
+            delete [] contributionMatrix[x];
+        }
+        delete [] contributionMatrix;
+    }
 }
 

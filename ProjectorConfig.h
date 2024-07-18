@@ -58,7 +58,9 @@ struct ProjectorParams {
 
 class ProjectorConfig {
 public:
+    static uint CAMHEIGHT, CAMWIDTH;
     static bool initGLFW();
+    static void computeContributions(ProjectorConfig* projectors, int count);
     bool shouldClose;
     // Generates the graycode pattern object and images to be projected
     void generateGraycodes();
@@ -70,8 +72,12 @@ public:
     Mat decodeGraycode();
     Mat getHomography();
     void projectImage(const Mat& img);
+    void visualizeContribution();
+    // CONSTRUCTORS
+    ProjectorConfig();
     explicit ProjectorConfig(ProjectorParams p);
     explicit ProjectorConfig(uint id, const ProjectorConfig* shared = nullptr);
+    ~ProjectorConfig();
 
 private:
     static VideoCapture camera;
@@ -92,6 +98,9 @@ private:
     std::vector<C2P> c2pList;
     // Homography matrix computed from c2p list
     Mat homography;
+    // Matrix containing the shared contribution to each pixel
+    float** contributionMatrix = nullptr;
+    Mat reduceCalibrationNoise(const Mat& calib);
     void computeHomography();
     bool initWindow(GLFWwindow* shared = nullptr);
     static void errorCallback(int error, const char* description);
