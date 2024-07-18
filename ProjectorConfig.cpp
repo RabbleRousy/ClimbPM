@@ -209,11 +209,12 @@ ProjectorConfig::ProjectorConfig(ProjectorParams p) : params(p), window(nullptr)
 
 ProjectorConfig::ProjectorConfig() : params(ProjectorParams()), window(nullptr) {}
 
-void ProjectorConfig::projectImage(const Mat &img) {
+void ProjectorConfig::projectImage(const Mat &img, bool warp) {
     // Warp the image with the homography matrix
     Size resolution(params.width, params.height);
     Mat warpedImage = img;
-    //warpPerspective(img, warpedImage, homography, resolution);
+    if (warp)
+        warpPerspective(img, warpedImage, homography, resolution);
 
     // Create projector window
     glfwMakeContextCurrent(window);
@@ -462,7 +463,7 @@ void ProjectorConfig::computeContributions(ProjectorConfig *projectors, int coun
 
 void ProjectorConfig::visualizeContribution() {
     // For testing: visualize contribution
-    Mat viz = Mat::zeros(CAMWIDTH, CAMHEIGHT, CV_8UC1);
+    Mat viz = Mat::zeros(CAMHEIGHT, CAMWIDTH, CV_8UC1);
     for (int x = 0; x < CAMWIDTH; x++) {
         for (int y = 0; y < CAMHEIGHT; y++) {
             viz.at<float>(x,y) = contributionMatrix[x][y];

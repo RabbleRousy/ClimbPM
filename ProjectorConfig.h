@@ -71,7 +71,7 @@ public:
     // Decodes the captured images and generates c2pList, returns visualization
     Mat decodeGraycode();
     Mat getHomography();
-    void projectImage(const Mat& img);
+    void projectImage(const Mat& img, bool warp);
     void visualizeContribution();
     // CONSTRUCTORS
     ProjectorConfig();
