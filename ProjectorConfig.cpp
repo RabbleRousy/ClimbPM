@@ -110,7 +110,7 @@ void ProjectorConfig::loadGraycodes() {
 
 Mat ProjectorConfig::decodeGraycode() {
     // Load the black and white captures from their predefined positions
-    Mat white = captured.front();
+    white = captured.front();
     captured.erase(captured.begin());
     Mat black = captured.back();
     captured.pop_back();
@@ -165,6 +165,40 @@ Mat ProjectorConfig::decodeGraycode() {
         std::cerr << "Error saving result image!" << std::endl;
 
     return viz;
+}
+
+void ProjectorConfig::loadC2Plist() {
+    std::ifstream file("captured" + std::to_string(params.id) + "/c2p.csv");
+    std::string line;
+
+    if (!file.is_open()) {
+        std::cerr << "Could not open the c2p file!" << std::endl;
+        return;
+    }
+
+    Mat viz = Mat::zeros(CAMHEIGHT, CAMWIDTH, CV_8UC3);
+    while (std::getline(file, line)) {
+        std::stringstream ss(line);
+        std::string item;
+        int data[4];
+        int index = 0;
+
+        while (std::getline(ss, item, ',')) {
+            data[index++] = std::stoi(item);
+        }
+
+        if (index == 4) {
+            c2pList.emplace_back(data[0], data[1], data[2], data[3]);
+            viz.at<cv::Vec3b>(data[1], data[0])[0] = data[2];
+            viz.at<cv::Vec3b>(data[1], data[0])[1] = data[3];
+        } else {
+            std::cerr << "Malformed line in CSV file: " << line << std::endl;
+        }
+    }
+
+    imshow("Calibation", viz);
+    waitKey(0);
+    file.close();
 }
 
 Mat ProjectorConfig::reduceCalibrationNoise(const Mat& calib) {
@@ -445,17 +479,20 @@ void ProjectorConfig::computeContributions(ProjectorConfig *projectors, int coun
     // CAREFUL! Looping over C2PList assumes they are all in the same order, CONFIRM THIS!!
     for (int pxl = 0; pxl < projectors[0].c2pList.size(); pxl++) {
         uint contributorsCount = 0;
+        uint whiteAcc = 0.0f;
         Point pixel(projectors[0].c2pList[pxl].cx, projectors[0].c2pList[pxl].cy);
         // Loop over all projectors and check if they contribute to the pixel
         for (int i = 0; i < count; i++) {
             if (projectors[i].c2pList[pxl].px + projectors[i].c2pList[pxl].py != 0) {
                 // This projector contributes to the camera pixel
                 contributorsCount++;
+                whiteAcc += projectors[i].white.at<cv::uint8_t>(pixel.x, pixel.y);
             }
         }
-        float contribution = contributorsCount == 0 ? 0.0f : 1.0f / contributorsCount;
         // Loop over all projectors and set the pixel's contribution value
         for (int i = 0; i < count; i++) {
+            float contribution = 0;
+            if (whiteAcc > 0) contribution = float(projectors[i].white.at<cv::uint8_t>(pixel.x, pixel.y)) / whiteAcc;
             projectors[i].contributionMatrix[pixel.x][pixel.y] = contribution;
         }
     }

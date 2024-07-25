@@ -4,6 +4,8 @@ int main()
 {
     if (!ProjectorConfig::initGLFW()) return -1;
 
+    ProjectorConfig::initCamera();
+
     const int PROJECTORCOUNT = 2;
     ProjectorConfig* projectors = new ProjectorConfig[PROJECTORCOUNT];
 
@@ -16,14 +18,22 @@ int main()
         Mat black = Mat::zeros(ProjectorConfig::CAMHEIGHT, ProjectorConfig::CAMWIDTH, CV_8UC3);
         for (int j = 0; j < PROJECTORCOUNT; j++) {
             if (j == i) continue;
-            projectors[j].clear();
+            projectors[j].projectImage(black, false);
         }
         projectors[i].generateGraycodes();
+
+        // CAPTURE OR LOAD GRAYCOADES
         projectors[i].captureGraycodes();
-        //projectors[i].decodeGraycode();
+        //projectors[i].loadGraycodes();
+
+        // DECODE OR LOAD DECODED CONFIG
+        projectors[i].decodeGraycode();
+        //projectors[i].loadC2Plist();
     }
+
     delete [] projectors;
     return 0;
+
     // Calculate and visualize contribution of each pixel
     ProjectorConfig::computeContributions(projectors, PROJECTORCOUNT);
     for (int i = 0; i < PROJECTORCOUNT; i++) {

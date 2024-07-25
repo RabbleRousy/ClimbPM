@@ -22,7 +22,7 @@ namespace fs = std::filesystem;
 #define GRAYCODEHEIGHTSTEP 50
 #define WHITETHRESHOLD 5
 #define BLACKTHRESHOLD 10
-#define PATTERN_DELAY 500
+#define PATTERN_DELAY 1000
 
 // Shader code (nothing fancy, basic texturing)
 #define VERTEXSHADERSOURCE "#version 330 core\nlayout (location = 0) in vec3 aPos;\nlayout (location = 1) in vec2 aTexCoord;\nout vec2 texCoord;\nvoid main()\n{\ngl_Position = vec4(aPos, 1.0);\ntexCoord = aTexCoord;\n}\0"
@@ -60,6 +60,7 @@ class ProjectorConfig {
 public:
     static uint CAMHEIGHT, CAMWIDTH;
     static bool initGLFW();
+    static void initCamera();
     static void computeContributions(ProjectorConfig* projectors, int count);
     bool shouldClose;
     // Generates the graycode pattern object and images to be projected
@@ -70,6 +71,8 @@ public:
     void loadGraycodes();
     // Decodes the captured images and generates c2pList, returns visualization
     Mat decodeGraycode();
+    // Loads the C2P list from .csv file
+    void loadC2Plist();
     Mat getHomography();
     void projectImage(const Mat& img, bool warp);
     void visualizeContribution();
@@ -94,6 +97,7 @@ private:
     std::vector<Mat> graycodes;
     // Captured images of projecting the graycodes from this projector
     std::vector<Mat> captured;
+    Mat white;
     // The camera-to-projector config of this projector
     std::vector<C2P> c2pList;
     // Homography matrix computed from c2p list
@@ -105,7 +109,6 @@ private:
     bool initWindow(GLFWwindow* shared = nullptr);
     static void errorCallback(int error, const char* description);
     static void keyCallback(GLFWwindow* window, int key, int scandone, int action, int mods);
-    static void initCamera();
     static Mat getCameraImage();
     // ------- OpenGL Functions ----------
     unsigned int createVertexBuffer();
