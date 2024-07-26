@@ -127,13 +127,19 @@ Mat ProjectorConfig::decodeGraycode() {
             bool thresholdPassed = white.at<cv::uint8_t>(y, x) - black.at<cv::uint8_t>(y, x) >
                                    BLACKTHRESHOLD;
             if (!thresholdPassed) thresholdFailCount++;
-            bool projPixel = pattern->getProjPixel(captured, x, y, pixel);
-            if (projPixel) projPxlCount++;
-            if (thresholdPassed && projPixel)
-            {
-                mappedPxlCount++;
-                viz.at<cv::Vec3b>(y,x)[0] = pixel.x;
-                viz.at<cv::Vec3b>(y,x)[1] = pixel.y;
+            try {
+                bool projPixel = pattern->getProjPixel(captured, x, y, pixel);
+                if (projPixel) projPxlCount++;
+                if (thresholdPassed && projPixel)
+                {
+                    mappedPxlCount++;
+                    viz.at<cv::Vec3b>(y,x)[0] = ((float) pixel.x / params.width) * 255;
+                    viz.at<cv::Vec3b>(y,x)[1] = ((float) pixel.y / params.height) * 255;
+                }
+            }
+            catch (Exception e) {
+                std::cerr << "Tried decoding graycodes before pattern was initialized! Make sure to call generateGraycodes() before decodeGraycode()!" << std::endl;
+                return viz; // empty
             }
         }
     }
@@ -146,10 +152,18 @@ Mat ProjectorConfig::decodeGraycode() {
     std::cout << mappedPxlCount << " of " << pxlCount <<
               " pixels (" << (float)(mappedPxlCount) / pxlCount * 100.0f << " %) were successfully mapped." << std::endl;
 
+    // DENOISE THE IMAGE BEFORE CONVERTING IT TO C2P COORDINATES
+    //imwrite("captured" + std::to_string(params.id) + "/noisy.png", viz);
     viz = reduceCalibrationNoise(viz);
+    //imwrite("captured" + std::to_string(params.id) + "/denoised.png", viz);
+
     for (int y = 0; y < CAMHEIGHT; y++) {
         for (int x = 0; x < CAMWIDTH; x++) {
-            c2pList.push_back(C2P(x, y, viz.at<Vec3b>(y,x)[0], viz.at<Vec3b>(y,x)[1]));
+            int px = viz.at<Vec3b>(y,x)[0];
+            int py = viz.at<Vec3b>(y,x)[1];
+            px = ((float)px / 255) * params.width;
+            py = ((float)py / 255) * params.height;
+            c2pList.push_back(C2P(x, y, px, py));
         }
     }
 
@@ -159,7 +173,6 @@ Mat ProjectorConfig::decodeGraycode() {
         os << elem.cx << ", " << elem.cy << ", " << elem.px << ", " << elem.py << std::endl;
     }
     os.close();
-
     // Save result image
     if (!imwrite("captured" + std::to_string(params.id) + "/result.png", viz))
         std::cerr << "Error saving result image!" << std::endl;
@@ -189,14 +202,14 @@ void ProjectorConfig::loadC2Plist() {
 
         if (index == 4) {
             c2pList.emplace_back(data[0], data[1], data[2], data[3]);
-            viz.at<cv::Vec3b>(data[1], data[0])[0] = data[2];
-            viz.at<cv::Vec3b>(data[1], data[0])[1] = data[3];
+            viz.at<cv::Vec3b>(data[1], data[0])[0] = ((float)data[2] / params.width) * 255;
+            viz.at<cv::Vec3b>(data[1], data[0])[1] = ((float)data[3] / params.height) * 255;
         } else {
             std::cerr << "Malformed line in CSV file: " << line << std::endl;
         }
     }
 
-    imshow("Calibation", viz);
+    imshow("Calibration", viz);
     waitKey(0);
     file.close();
 }
@@ -239,10 +252,30 @@ void ProjectorConfig::computeHomography() {
     homography = findHomography(cameraPoints, projectorPoints, RANSAC);
 }
 
-ProjectorConfig::ProjectorConfig(ProjectorParams p) : params(p), window(nullptr) {}
+// ----------------------- CONSTRUCTORS --------------------------------------------
+ProjectorConfig::ProjectorConfig() : params(ProjectorParams()), window(nullptr), shouldClose(false) {}
 
-ProjectorConfig::ProjectorConfig() : params(ProjectorParams()), window(nullptr) {}
+ProjectorConfig::ProjectorConfig(ProjectorParams p) : params(p), window(nullptr), shouldClose(false) {}
 
+ProjectorConfig::ProjectorConfig(uint id, const ProjectorConfig* shared) : window(nullptr), shouldClose(false) {
+    int count;
+    auto monitors = glfwGetMonitors(&count);
+    if (id >= count) {
+        std::cerr << "Tried initializing projector with ID " << id << ", but that monitor does not exist!" << std::endl;
+    }
+
+    GLFWmonitor* monitor = monitors[id];
+    const GLFWvidmode* vidMode = glfwGetVideoMode(monitor);
+    int xPos, yPos;
+    glfwGetMonitorPos(monitor, &xPos, &yPos);
+    params = ProjectorParams(id, vidMode->width, vidMode->height, xPos, yPos);
+    std::cout << "Creating full screen window on monitor #" << id << " (" << vidMode->width << " x " << vidMode->height << " px) at "
+              << xPos << "/" << yPos << std::endl;
+
+    initWindow((shared == nullptr) ? nullptr : shared->window);
+}
+
+// ---------------------- OPENGL FUNCTIONS ------------------------------
 void ProjectorConfig::projectImage(const Mat &img, bool warp) {
     // Warp the image with the homography matrix
     Size resolution(params.width, params.height);
@@ -425,24 +458,6 @@ unsigned int ProjectorConfig::createShaderProgram() {
     glDeleteShader(vertexShader);
     glDeleteShader(fragmentShader);
     return shaderProgram;
-}
-
-ProjectorConfig::ProjectorConfig(uint id, const ProjectorConfig* shared) : window(nullptr), shouldClose(false) {
-    int count;
-    auto monitors = glfwGetMonitors(&count);
-    if (id >= count) {
-        std::cerr << "Tried initializing projector with ID " << id << ", but that monitor does not exist!" << std::endl;
-    }
-
-    GLFWmonitor* monitor = monitors[id];
-    const GLFWvidmode* vidMode = glfwGetVideoMode(monitor);
-    int xPos, yPos;
-    glfwGetMonitorPos(monitor, &xPos, &yPos);
-    params = ProjectorParams(id, vidMode->width, vidMode->height, xPos, yPos);
-    std::cout << "Creating full screen window on monitor #" << id << " (" << vidMode->width << " x " << vidMode->height << " px) at "
-            << xPos << "/" << yPos << std::endl;
-
-    initWindow((shared == nullptr) ? nullptr : shared->window);
 }
 
 bool ProjectorConfig::initGLFW() {

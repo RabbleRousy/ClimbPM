@@ -4,6 +4,15 @@ int main()
 {
     if (!ProjectorConfig::initGLFW()) return -1;
 
+    ProjectorConfig dummyProjector = ProjectorConfig(ProjectorParams(1, 1920, 1080, 0, 0));
+    ProjectorConfig::CAMHEIGHT = 1080;
+    ProjectorConfig::CAMWIDTH = 1920;
+
+    dummyProjector.generateGraycodes();
+    dummyProjector.loadC2Plist();
+
+    return 0;
+
     ProjectorConfig::initCamera();
 
     const int PROJECTORCOUNT = 2;
