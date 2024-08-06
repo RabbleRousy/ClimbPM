@@ -305,6 +305,16 @@ void ProjectorConfig::projectImage(const Mat &img, bool warp) {
     shouldClose = glfwWindowShouldClose(window);
 }
 
+void projectImage(ProjectorConfig* projectors, uint count, const Mat& img) {
+    bool shouldClose = false;
+    while (!shouldClose) {
+        for (int i = 0; i < count; i++) {
+            if (projectors[i].shouldClose) shouldClose = true;
+            projectors[i].projectImage(img, true);
+        }
+    }
+}
+
 bool ProjectorConfig::initWindow(GLFWwindow* shared) {
     // Get monitor
     int count;

@@ -62,6 +62,7 @@ public:
     static bool initGLFW();
     static void initCamera();
     static void computeContributions(ProjectorConfig* projectors, int count);
+    static void projectImage(ProjectorConfig* projectors, uint count, const Mat& img);
     bool shouldClose;
     // Generates the graycode pattern object and images to be projected
     void generateGraycodes();

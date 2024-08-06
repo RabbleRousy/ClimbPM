@@ -1,7 +1,5 @@
 #include "ProjectorConfig.h"
 
-void projectImage(ProjectorConfig* projectors, uint count, Mat img);
-
 int main()
 {
     if (!ProjectorConfig::initGLFW()) return -1;
@@ -60,16 +58,6 @@ int main()
 
     glfwTerminate();
     return 0;
-}
-
-void projectImage(ProjectorConfig* projectors, uint count, Mat img) {
-    bool shouldClose = false;
-    while (!shouldClose) {
-        for (int i = 0; i < count; i++) {
-            if (projectors[i].shouldClose) shouldClose = true;
-            projectors[i].projectImage(img, true);
-        }
-    }
 }
 
 
