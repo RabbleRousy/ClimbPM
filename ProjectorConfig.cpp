@@ -106,6 +106,7 @@ void ProjectorConfig::loadGraycodes() {
         captured.push_back(img);
         i = i + 1;
     }
+    white = captured.front();
 }
 
 Mat ProjectorConfig::decodeGraycode() {
@@ -500,14 +501,16 @@ void ProjectorConfig::computeContributions(ProjectorConfig *projectors, int coun
         for (int i = 0; i < count; i++) {
             if (projectors[i].c2pList[pxl].px + projectors[i].c2pList[pxl].py != 0) {
                 // This projector contributes to the camera pixel
-                contributorsCount++;
-                whiteAcc += projectors[i].white.at<cv::uint8_t>(pixel.x, pixel.y);
+                whiteAcc += projectors[i].white.at<cv::uint8_t>(pixel.y, pixel.x);
             }
         }
+
         // Loop over all projectors and set the pixel's contribution value
         for (int i = 0; i < count; i++) {
             float contribution = 0;
-            if (whiteAcc > 0) contribution = float(projectors[i].white.at<cv::uint8_t>(pixel.x, pixel.y)) / whiteAcc;
+            if ((whiteAcc > 0) && (projectors[i].c2pList[pxl].px + projectors[i].c2pList[pxl].py != 0)) {
+                contribution = float(projectors[i].white.at<cv::uint8_t>(pixel.y, pixel.x)) / whiteAcc;
+            }
             projectors[i].contributionMatrix[pixel.x][pixel.y] = contribution;
         }
     }
@@ -518,11 +521,13 @@ void ProjectorConfig::visualizeContribution() {
     Mat viz = Mat::zeros(CAMHEIGHT, CAMWIDTH, CV_8UC1);
     for (int x = 0; x < CAMWIDTH; x++) {
         for (int y = 0; y < CAMHEIGHT; y++) {
-            viz.at<float>(x,y) = contributionMatrix[x][y];
+            viz.at<uint8_t>(y,x) = uint(contributionMatrix[x][y] * 255);
         }
     }
+
     imshow("Contribution Projector" + std::to_string(params.id), viz);
     waitKey(0);
+    imwrite("captured" + std::to_string(params.id) + "/contribution.png", viz);
 }
 
 ProjectorConfig::~ProjectorConfig() {
