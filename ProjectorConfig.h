@@ -22,7 +22,7 @@ namespace fs = std::filesystem;
 #define GRAYCODEHEIGHTSTEP 50
 #define WHITETHRESHOLD 5
 #define BLACKTHRESHOLD 10
-#define PATTERN_DELAY 1000
+#define PATTERN_DELAY 3000
 
 // Shader code (nothing fancy, basic texturing)
 #define VERTEXSHADERSOURCE "#version 330 core\nlayout (location = 0) in vec3 aPos;\nlayout (location = 1) in vec2 aTexCoord;\nout vec2 texCoord;\nvoid main()\n{\ngl_Position = vec4(aPos, 1.0);\ntexCoord = aTexCoord;\n}\0"

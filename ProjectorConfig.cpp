@@ -282,8 +282,9 @@ void ProjectorConfig::projectImage(const Mat &img, bool warp) {
     Size resolution(params.width, params.height);
     Mat warpedImage = img;
     if (warp) {
-        applyContributionMatrix(img, warpedImage);
-        warpPerspective(warpedImage, warpedImage, homography, resolution);
+        Mat intensityCorrectedImage;
+        applyContributionMatrix(img, intensityCorrectedImage);
+        warpPerspective(intensityCorrectedImage, warpedImage, getHomography(), resolution);
     }
 
     // Create projector window
@@ -523,6 +524,13 @@ void ProjectorConfig::computeContributions(ProjectorConfig *projectors, int coun
             projectors[i].contributionMatrix.at<float>(pixel.y, pixel.x) = contribution;
         }
     }
+
+    // Save visualizations
+    for (int i = 0; i < count; i++) {
+        Mat viz;
+        projectors[i].contributionMatrix.convertTo(viz, CV_8UC1, 255.0);
+        imwrite("captured" + std::to_string(projectors[i].params.id) + "/contribution.png", viz);
+    }
 }
 
 void ProjectorConfig::visualizeContribution() {
@@ -531,7 +539,6 @@ void ProjectorConfig::visualizeContribution() {
     contributionMatrix.convertTo(viz, CV_8UC1, 255.0);
     imshow("Contribution Projector" + std::to_string(params.id), viz);
     waitKey(0);
-    imwrite("captured" + std::to_string(params.id) + "/contribution.png", viz);
 }
 
 void ProjectorConfig::applyContributionMatrix(const Mat& img, Mat& result) {
