@@ -536,7 +536,7 @@ void ProjectorConfig::visualizeContribution() {
 
 void ProjectorConfig::applyContributionMatrix(const Mat& img, Mat& result) {
     Mat floatImage;
-    img.convertTo(floatImage, CV_32FC3, 1.0f/255.0f);
+    img.convertTo(floatImage, CV_32FC3);
 
     std::vector<Mat> channels(3);
     split(floatImage, channels);
@@ -546,6 +546,6 @@ void ProjectorConfig::applyContributionMatrix(const Mat& img, Mat& result) {
     }
 
     merge(channels, result);
-    result.convertTo(result, CV_8UC3, 255.0);
+    result.convertTo(result, CV_8UC3);
 }
 
