@@ -281,8 +281,10 @@ void ProjectorConfig::projectImage(const Mat &img, bool warp) {
     // Warp the image with the homography matrix
     Size resolution(params.width, params.height);
     Mat warpedImage = img;
-    if (warp)
-        warpPerspective(img, warpedImage, homography, resolution);
+    if (warp) {
+        applyContributionMatrix(img, warpedImage);
+        warpPerspective(warpedImage, warpedImage, homography, resolution);
+    }
 
     // Create projector window
     glfwMakeContextCurrent(window);
@@ -305,7 +307,7 @@ void ProjectorConfig::projectImage(const Mat &img, bool warp) {
     shouldClose = glfwWindowShouldClose(window);
 }
 
-void projectImage(ProjectorConfig* projectors, uint count, const Mat& img) {
+void ProjectorConfig::projectImage(ProjectorConfig* projectors, uint count, const Mat& img) {
     bool shouldClose = false;
     while (!shouldClose) {
         for (int i = 0; i < count; i++) {
@@ -496,10 +498,7 @@ void ProjectorConfig::keyCallback(GLFWwindow *window, int key, int scandone, int
 void ProjectorConfig::computeContributions(ProjectorConfig *projectors, int count) {
     // Initialize 2 dimensional arrays for contribution matrix
     for (int i = 0; i < count; i++) {
-        projectors[i].contributionMatrix = new float*[CAMWIDTH];
-        for (int x = 0; x < CAMWIDTH; x++) {
-            projectors[i].contributionMatrix[x] = new float[CAMHEIGHT];
-        }
+        projectors[i].contributionMatrix = Mat_<float>(CAMHEIGHT, CAMWIDTH);
     }
 
     // CAREFUL! Looping over C2PList assumes they are all in the same order, CONFIRM THIS!!
@@ -517,35 +516,36 @@ void ProjectorConfig::computeContributions(ProjectorConfig *projectors, int coun
 
         // Loop over all projectors and set the pixel's contribution value
         for (int i = 0; i < count; i++) {
-            float contribution = 0;
+            float contribution = 0.0f;
             if ((whiteAcc > 0) && (projectors[i].c2pList[pxl].px + projectors[i].c2pList[pxl].py != 0)) {
                 contribution = float(projectors[i].white.at<cv::uint8_t>(pixel.y, pixel.x)) / whiteAcc;
             }
-            projectors[i].contributionMatrix[pixel.x][pixel.y] = contribution;
+            projectors[i].contributionMatrix.at<float>(pixel.y, pixel.x) = contribution;
         }
     }
 }
 
 void ProjectorConfig::visualizeContribution() {
     // For testing: visualize contribution
-    Mat viz = Mat::zeros(CAMHEIGHT, CAMWIDTH, CV_8UC1);
-    for (int x = 0; x < CAMWIDTH; x++) {
-        for (int y = 0; y < CAMHEIGHT; y++) {
-            viz.at<uint8_t>(y,x) = uint(contributionMatrix[x][y] * 255);
-        }
-    }
-
+    Mat viz;
+    contributionMatrix.convertTo(viz, CV_8UC1, 255.0);
     imshow("Contribution Projector" + std::to_string(params.id), viz);
     waitKey(0);
     imwrite("captured" + std::to_string(params.id) + "/contribution.png", viz);
 }
 
-ProjectorConfig::~ProjectorConfig() {
-    if (contributionMatrix != nullptr) {
-        for (int x = 0; x < CAMWIDTH; x++) {
-            delete [] contributionMatrix[x];
-        }
-        delete [] contributionMatrix;
+void ProjectorConfig::applyContributionMatrix(const Mat& img, Mat& result) {
+    Mat floatImage;
+    img.convertTo(floatImage, CV_32FC3, 1.0f/255.0f);
+
+    std::vector<Mat> channels(3);
+    split(floatImage, channels);
+
+    for (auto& channel : channels) {
+        multiply(channel, contributionMatrix, channel);
     }
+
+    merge(channels, result);
+    result.convertTo(result, CV_8UC3, 255.0);
 }
 

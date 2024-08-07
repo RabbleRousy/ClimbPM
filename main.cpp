@@ -50,9 +50,10 @@ int main()
     std::cout << "Computing individual contributions..." << std::endl;
     ProjectorConfig::computeContributions(projectors, PROJECTORCOUNT);
 
-    for (int i = 0; i < PROJECTORCOUNT; i++) {
-        projectors[i].visualizeContribution();
-    }
+
+    auto testImg = imread("../Resources/test-image.jpg");
+
+    ProjectorConfig::projectImage(projectors, PROJECTORCOUNT, testImg);
 
     delete [] projectors;
 

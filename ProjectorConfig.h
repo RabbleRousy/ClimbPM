@@ -81,7 +81,6 @@ public:
     ProjectorConfig();
     explicit ProjectorConfig(ProjectorParams p);
     explicit ProjectorConfig(uint id, const ProjectorConfig* shared = nullptr);
-    ~ProjectorConfig();
 
 private:
     static VideoCapture camera;
@@ -103,8 +102,9 @@ private:
     std::vector<C2P> c2pList;
     // Homography matrix computed from c2p list
     Mat homography;
-    // Matrix containing the shared contribution to each pixel
-    float** contributionMatrix = nullptr;
+    // Matrix containing the shared contribution to each pixel in camera space
+    Mat contributionMatrix;
+    void applyContributionMatrix(const Mat& img, Mat& result);
     Mat reduceCalibrationNoise(const Mat& calib);
     void computeHomography();
     bool initWindow(GLFWwindow* shared = nullptr);
