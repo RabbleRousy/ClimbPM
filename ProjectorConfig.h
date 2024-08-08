@@ -20,8 +20,8 @@ namespace fs = std::filesystem;
 
 #define GRAYCODEWIDTHSTEP 50
 #define GRAYCODEHEIGHTSTEP 50
-#define WHITETHRESHOLD 5
-#define BLACKTHRESHOLD 10
+#define WHITETHRESHOLD 80
+#define BLACKTHRESHOLD 20
 #define PATTERN_DELAY 3000
 
 // Shader code (nothing fancy, basic texturing)

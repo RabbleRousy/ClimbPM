@@ -4,8 +4,6 @@ int main()
 {
     if (!ProjectorConfig::initGLFW()) return -1;
 
-
-    ProjectorConfig dummyProjector = ProjectorConfig(ProjectorParams(1, 1920, 1080, 0, 0));
     ProjectorConfig::CAMHEIGHT = 1080;
     ProjectorConfig::CAMWIDTH = 1920;
 
@@ -15,11 +13,11 @@ int main()
     ProjectorConfig* projectors = new ProjectorConfig[PROJECTORCOUNT];
 
     // Define the projector configuration
-    projectors[0] = ProjectorConfig(1);
-    projectors[1] = ProjectorConfig(2, projectors);
+    projectors[0] = ProjectorConfig(ProjectorParams(1, 1920, 1080, 0, 0));
+    projectors[1] = ProjectorConfig(ProjectorParams(2, 1920, 1080, 0, 0));
     // Calibrate projectors
     for (int i = 0; i < PROJECTORCOUNT; i++) {
-        std::cout << "Calibrating projector " << i + 1 << " ...";
+        std::cout << "Calibrating projector " << i + 1 << " ..." << std::endl;
 
         projectors[i].generateGraycodes();
 
@@ -35,8 +33,9 @@ int main()
         projectors[i].loadGraycodes();
 
         // DECODE OR LOAD DECODED CONFIG
-        //projectors[i].decodeGraycode();
-        projectors[i].loadC2Plist();
+        projectors[i].decodeGraycode();
+        //projectors[i].loadC2Plist();
+
         std::cout << " Calibration finished." << std::endl;
     }
 
@@ -44,10 +43,12 @@ int main()
     std::cout << "Computing individual contributions..." << std::endl;
     ProjectorConfig::computeContributions(projectors, PROJECTORCOUNT);
 
+    /*
 
     auto testImg = imread("../Resources/test-image.jpg");
 
     ProjectorConfig::projectImage(projectors, PROJECTORCOUNT, testImg);
+    */
 
     delete [] projectors;
 

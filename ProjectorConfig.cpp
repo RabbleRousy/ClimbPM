@@ -116,22 +116,29 @@ Mat ProjectorConfig::decodeGraycode() {
     Mat black = captured.back();
     captured.pop_back();
 
+    // Stores the amount of light that reaches each pixel, that is not coming from this projectors light
+    Mat litByOthers = black - white;
+
     Mat viz = Mat::zeros(CAMHEIGHT, CAMWIDTH, CV_8UC3);
     c2pList = std::vector<C2P>();
 
     // Decode each pixel
-    uint pxlCount = 0, thresholdFailCount = 0, projPxlCount = 0, mappedPxlCount = 0;
+    uint pxlCount = 0, thresholdFailCount = 0, projPxlCount = 0, mappedPxlCount = 0, ambientCount = 0;
     for (int y = 0; y < CAMHEIGHT; y++) {
         for (int x = 0; x < CAMWIDTH; x++) {
             cv::Point pixel;
             pxlCount++;
-            bool thresholdPassed = white.at<cv::uint8_t>(y, x) - black.at<cv::uint8_t>(y, x) >
-                                   BLACKTHRESHOLD;
+            bool ambientLit = litByOthers.at<cv::uint8_t>(y, x) > 5;
+            if (ambientLit) ambientCount++;
+            auto whiteValue = white.at<cv::uint8_t>(y, x);
+            // Check white value for very bright pixels, as they would falsely be discarded by this check
+            bool thresholdPassed = (whiteValue >= 250) || (whiteValue - black.at<cv::uint8_t>(y, x) >
+                                   BLACKTHRESHOLD);
             if (!thresholdPassed) thresholdFailCount++;
             try {
                 bool projPixel = pattern->getProjPixel(captured, x, y, pixel);
                 if (projPixel) projPxlCount++;
-                if (thresholdPassed && projPixel)
+                if (!ambientLit && thresholdPassed && projPixel)
                 {
                     mappedPxlCount++;
                     viz.at<cv::Vec3b>(y,x)[0] = ((float) pixel.x / params.width) * 255;
@@ -144,13 +151,16 @@ Mat ProjectorConfig::decodeGraycode() {
             }
         }
     }
-    std::cout << "Threshold failed for " << thresholdFailCount << " of " << pxlCount <<
+    std::cout << "\t\tAmbient Light test failed for " << ambientCount << " of " << pxlCount <<
+              " pixels (" << (float)ambientCount / pxlCount * 100.0f << " %)." << std::endl;
+
+    std::cout << "\t\tThreshold failed for " << thresholdFailCount << " of " << pxlCount <<
               " pixels (" << (float)thresholdFailCount / pxlCount * 100.0f << " %)." << std::endl;
 
-    std::cout << "No mapping retrieved for " << pxlCount - projPxlCount << " of " << pxlCount <<
+    std::cout << "\t\tNo mapping retrieved for " << pxlCount - projPxlCount << " of " << pxlCount <<
               " pixels (" << (float)(pxlCount - projPxlCount) / pxlCount * 100.0f << " %)." << std::endl;
 
-    std::cout << mappedPxlCount << " of " << pxlCount <<
+    std::cout << "\t\t" << mappedPxlCount << " of " << pxlCount <<
               " pixels (" << (float)(mappedPxlCount) / pxlCount * 100.0f << " %) were successfully mapped." << std::endl;
 
     // DENOISE THE IMAGE BEFORE CONVERTING IT TO C2P COORDINATES
