@@ -43,6 +43,7 @@ void ProjectorConfig::initCamera() {
 Mat ProjectorConfig::getCameraImage() {
     Mat image;
     camera.read(image);
+    flip(image, image, 1); // flip horizontally
     return image.clone();
 }
 
@@ -290,8 +291,11 @@ ProjectorConfig::ProjectorConfig(uint id, const ProjectorConfig* shared) : windo
 void ProjectorConfig::projectImage(const Mat &img, bool warp) {
     // Warp the image with the homography matrix
     Size resolution(params.width, params.height);
+
     Mat warpedImage = img;
-    if (warp) {
+
+    if (hide) warpedImage = Mat::zeros(resolution, CV_8UC3);
+    else if (warp) {
         Mat intensityCorrectedImage;
         applyContributionMatrix(img, intensityCorrectedImage);
         warpPerspective(intensityCorrectedImage, warpedImage, getHomography(), resolution);
@@ -345,6 +349,9 @@ bool ProjectorConfig::initWindow(GLFWwindow* shared) {
     glfwSetKeyCallback(window, keyCallback);
 
     glfwMakeContextCurrent(window);
+
+    // For retrieval during static keyCallback function
+    glfwSetWindowUserPointer(window, this);
 
     // Either we have shared state or we need to create it
     if (shared == nullptr) {
@@ -501,9 +508,18 @@ void ProjectorConfig::errorCallback(int error, const char* description) {
     std::cerr << "GLFW Error (" << error << "): " << description << std::endl;
 }
 
+// TODO: Rework to set a publicly retrievable lastKeyCode
 void ProjectorConfig::keyCallback(GLFWwindow *window, int key, int scandone, int action, int mods) {
-    if (action == GLFW_PRESS && key == GLFW_KEY_ESCAPE)
+    if (action != GLFW_PRESS) return;
+
+    auto myConfig = static_cast<ProjectorConfig*>(glfwGetWindowUserPointer(window));
+
+    if (key == GLFW_KEY_ESCAPE)
         glfwSetWindowShouldClose(window, GLFW_TRUE);
+    else if (key == myConfig->params.id + 48) { // GLFW_KEY_0 = 48 etc.
+        myConfig->hide = !myConfig->hide;
+        std::cout << (myConfig->hide ? "Hide" : "Show") << " Projector " << myConfig->params.id << "!" << std::endl;
+    }
 }
 
 void ProjectorConfig::computeContributions(ProjectorConfig *projectors, int count) {
