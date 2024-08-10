@@ -220,10 +220,23 @@ void ProjectorConfig::loadC2Plist() {
             std::cerr << "Malformed line in CSV file: " << line << std::endl;
         }
     }
-
-    imshow("Calibration", viz);
-    waitKey(0);
     file.close();
+}
+
+void ProjectorConfig::loadContribution() {
+    Mat contributionVisualization = imread("captured" + std::to_string(params.id) + "/contribution.png", IMREAD_GRAYSCALE);
+    if (contributionVisualization.empty())
+        std::cerr << "Failed to load contribution matrix for projector" << params.id << "! Check if contribution.png exists." << std::endl;
+
+    contributionVisualization.convertTo(contributionMatrix, CV_8UC1, 1.0/255.0);
+    imshow("Contribution Projector" + std::to_string(params.id), contributionVisualization);
+    waitKey(0);
+}
+
+void ProjectorConfig::loadConfiguration() {
+    loadGraycodes();
+    loadC2Plist();
+    loadContribution();
 }
 
 Mat ProjectorConfig::reduceCalibrationNoise(const Mat& calib) {
@@ -300,6 +313,11 @@ void ProjectorConfig::projectImage(const Mat &img, bool warp) {
         applyContributionMatrix(img, intensityCorrectedImage);
         warpPerspective(intensityCorrectedImage, warpedImage, getHomography(), resolution);
     }
+
+    imshow("Projection Content Projector" + std::to_string(params.id), warpedImage);
+    waitKey(0);
+    destroyWindow("Projection Content Projector" + std::to_string(params.id));
+    return;
 
     // Create projector window
     glfwMakeContextCurrent(window);
@@ -568,14 +586,14 @@ void ProjectorConfig::visualizeContribution() {
 }
 
 void ProjectorConfig::applyContributionMatrix(const Mat& img, Mat& result) {
-    Mat floatImage;
-    img.convertTo(floatImage, CV_32FC3);
 
     std::vector<Mat> channels(3);
-    split(floatImage, channels);
+    split(img, channels);
 
     for (auto& channel : channels) {
-        multiply(channel, contributionMatrix, channel);
+        Mat dstChannel = Mat::zeros(channel.rows, channel.cols, channel.type());
+        multiply(channel, contributionMatrix, dstChannel);
+        channel = dstChannel.clone();
     }
 
     merge(channels, result);

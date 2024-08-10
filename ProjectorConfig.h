@@ -72,11 +72,11 @@ public:
     void loadGraycodes();
     // Decodes the captured images and generates c2pList, returns visualization
     Mat decodeGraycode();
-    // Loads the C2P list from .csv file
-    void loadC2Plist();
     Mat getHomography();
     void projectImage(const Mat& img, bool warp);
     void visualizeContribution();
+    // Initializes the configuration from existing files
+    void loadConfiguration();
     // CONSTRUCTORS
     ProjectorConfig();
     explicit ProjectorConfig(ProjectorParams p);
@@ -108,11 +108,15 @@ private:
     void applyContributionMatrix(const Mat& img, Mat& result);
     Mat reduceCalibrationNoise(const Mat& calib);
     void computeHomography();
+    // Loads the C2P list from .csv file
+    void loadC2Plist();
+    // Loads contribution matrix from file
+    void loadContribution();
     bool initWindow(GLFWwindow* shared = nullptr);
     static void keyCallback(GLFWwindow* window, int key, int scandone, int action, int mods);
     static void errorCallback(int error, const char* description);
     static Mat getCameraImage();
-    // ------- OpenGL Functions ----------
+    // ------- OpenGL Helper Functions ----------
     unsigned int createVertexBuffer();
     unsigned int createElementBuffer();
     unsigned int createVertexArray(unsigned int vertexBuffer, unsigned int elementBuffer);
