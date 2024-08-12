@@ -228,9 +228,7 @@ void ProjectorConfig::loadContribution() {
     if (contributionVisualization.empty())
         std::cerr << "Failed to load contribution matrix for projector" << params.id << "! Check if contribution.png exists." << std::endl;
 
-    contributionVisualization.convertTo(contributionMatrix, CV_8UC1, 1.0/255.0);
-    imshow("Contribution Projector" + std::to_string(params.id), contributionVisualization);
-    waitKey(0);
+    contributionVisualization.convertTo(contributionMatrix, CV_32FC1, 1.0f/255.0f);
 }
 
 void ProjectorConfig::loadConfiguration() {
@@ -307,23 +305,25 @@ void ProjectorConfig::projectImage(const Mat &img, bool warp) {
 
     Mat warpedImage = img;
 
-    if (hide) warpedImage = Mat::zeros(resolution, CV_8UC3);
+    //std::string path = "RenderTests/Projector" + std::to_string(params.id);
+
+    if (/*hide*/false) warpedImage = Mat::zeros(resolution, CV_8UC3);
     else if (warp) {
+        /*Mat warpOnly;
+        warpPerspective(img, warpOnly, getHomography(), resolution);
+        imwrite(path + "warping.png", warpOnly); */
         Mat intensityCorrectedImage;
         applyContributionMatrix(img, intensityCorrectedImage);
+        //imwrite(path + "contribution.png", intensityCorrectedImage);
         warpPerspective(intensityCorrectedImage, warpedImage, getHomography(), resolution);
+        // Flip horizontally
+        flip(warpedImage, warpedImage, 1);
     }
-
-    imshow("Projection Content Projector" + std::to_string(params.id), warpedImage);
-    waitKey(0);
-    destroyWindow("Projection Content Projector" + std::to_string(params.id));
-    return;
+    //imwrite(path + "result.png", warpedImage);
 
     // Create projector window
     glfwMakeContextCurrent(window);
 
-    // Flip vertically
-    //flip(warpedImage, warpedImage, 0);
     // Upload the image to the texture
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, warpedImage.cols, warpedImage.rows, 0, GL_BGR, GL_UNSIGNED_BYTE, warpedImage.ptr());
     // Render
@@ -586,17 +586,19 @@ void ProjectorConfig::visualizeContribution() {
 }
 
 void ProjectorConfig::applyContributionMatrix(const Mat& img, Mat& result) {
-
+    // Split image into color channels
     std::vector<Mat> channels(3);
     split(img, channels);
 
+    // Apply contributionMatrix to each channel
     for (auto& channel : channels) {
-        Mat dstChannel = Mat::zeros(channel.rows, channel.cols, channel.type());
-        multiply(channel, contributionMatrix, dstChannel);
-        channel = dstChannel.clone();
+        // Convert to float for multiplication
+        channel.convertTo(channel, CV_32F);
+        multiply(channel, contributionMatrix, channel);
+        // Convert back
+        channel.convertTo(channel, CV_8U);
     }
-
+    // Merge transformed channels back together
     merge(channels, result);
-    result.convertTo(result, CV_8UC3);
 }
 
