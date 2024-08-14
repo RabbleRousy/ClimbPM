@@ -7,14 +7,14 @@ int main()
     ProjectorConfig::CAMHEIGHT = 1080;
     ProjectorConfig::CAMWIDTH = 1920;
 
-    //ProjectorConfig::initCamera();
+    ProjectorConfig::initCamera();
 
     const int PROJECTORCOUNT = 2;
     ProjectorConfig* projectors = new ProjectorConfig[PROJECTORCOUNT];
 
     // Define the projector configuration
-    projectors[0] = ProjectorConfig(ProjectorParams(1, 1920, 1080, 0, 0));
-    projectors[1] = ProjectorConfig(ProjectorParams(2, 1920, 1080, 0, 0));
+    projectors[0] = ProjectorConfig(1);
+    projectors[1] = ProjectorConfig(2, projectors);
     // Calibrate/load projector configurations
     for (int i = 0; i < PROJECTORCOUNT; i++) {
 
@@ -48,6 +48,7 @@ int main()
             ProjectorConfig::computeContributions(projectors, PROJECTORCOUNT);
         }
     }
+
     // Close windows opened while calibrating
     destroyAllWindows();
 

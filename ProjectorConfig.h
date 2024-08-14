@@ -22,7 +22,7 @@ namespace fs = std::filesystem;
 #define GRAYCODEHEIGHTSTEP 50
 #define WHITETHRESHOLD 80
 #define BLACKTHRESHOLD 20
-#define PATTERN_DELAY 5000
+#define PATTERN_DELAY 3000
 
 // Shader code (nothing fancy, basic texturing)
 #define VERTEXSHADERSOURCE "#version 330 core\nlayout (location = 0) in vec3 aPos;\nlayout (location = 1) in vec2 aTexCoord;\nout vec2 texCoord;\nvoid main()\n{\ngl_Position = vec4(aPos, 1.0);\ntexCoord = aTexCoord;\n}\0"
@@ -73,7 +73,8 @@ public:
     // Decodes the captured images and generates c2pList, returns visualization
     Mat decodeGraycode();
     Mat getHomography();
-    void projectImage(const Mat& img, bool warp);
+    Mat warpImage(Mat img, bool save = false);
+    void projectImage(Mat img, bool warp);
     void visualizeContribution();
     // Initializes the configuration from existing files
     void loadConfiguration();
@@ -109,7 +110,7 @@ private:
     Mat reduceCalibrationNoise(const Mat& calib);
     void computeHomography();
     // Loads the C2P list from .csv file
-    void loadC2Plist();
+    Mat loadC2Plist();
     // Loads contribution matrix from file
     void loadContribution();
     bool initWindow(GLFWwindow* shared = nullptr);

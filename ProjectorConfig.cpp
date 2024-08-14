@@ -43,7 +43,6 @@ void ProjectorConfig::initCamera() {
 Mat ProjectorConfig::getCameraImage() {
     Mat image;
     camera.read(image);
-    flip(image, image, 1); // flip horizontally
     return image.clone();
 }
 
@@ -192,16 +191,17 @@ Mat ProjectorConfig::decodeGraycode() {
     return viz;
 }
 
-void ProjectorConfig::loadC2Plist() {
+Mat ProjectorConfig::loadC2Plist() {
     std::ifstream file("captured" + std::to_string(params.id) + "/c2p.csv");
     std::string line;
 
+    Mat viz = Mat::zeros(CAMHEIGHT, CAMWIDTH, CV_8UC3);
+
     if (!file.is_open()) {
         std::cerr << "Could not open the c2p file!" << std::endl;
-        return;
+        return viz;
     }
 
-    Mat viz = Mat::zeros(CAMHEIGHT, CAMWIDTH, CV_8UC3);
     while (std::getline(file, line)) {
         std::stringstream ss(line);
         std::string item;
@@ -221,6 +221,7 @@ void ProjectorConfig::loadC2Plist() {
         }
     }
     file.close();
+    return viz;
 }
 
 void ProjectorConfig::loadContribution() {
@@ -273,6 +274,8 @@ void ProjectorConfig::computeHomography() {
     }
     // Here is where the magic happens
     homography = findHomography(cameraPoints, projectorPoints, RANSAC);
+    std::cout << "Homography Matrix computed:\n" << homography << std::endl;
+    std::cout << "Determinant: " << determinant(homography) << std::endl;
 }
 
 // ----------------------- CONSTRUCTORS --------------------------------------------
@@ -298,28 +301,37 @@ ProjectorConfig::ProjectorConfig(uint id, const ProjectorConfig* shared) : windo
     initWindow((shared == nullptr) ? nullptr : shared->window);
 }
 
-// ---------------------- OPENGL FUNCTIONS ------------------------------
-void ProjectorConfig::projectImage(const Mat &img, bool warp) {
-    // Warp the image with the homography matrix
+Mat ProjectorConfig::warpImage(Mat img, bool save) {
     Size resolution(params.width, params.height);
+    Mat warpedImage;
+    // Flip horizontally
+    flip(img, warpedImage, 1);
+    // Apply intensity according to each projector pixel's contribution
+    Mat intensityCorrectedImage;
+    applyContributionMatrix(warpedImage, intensityCorrectedImage);
+    // Warp from camera space to projector space using the homography matrix
+    warpPerspective(intensityCorrectedImage, warpedImage, getHomography(), resolution);
 
-    Mat warpedImage = img;
-
-    //std::string path = "RenderTests/Projector" + std::to_string(params.id);
-
-    if (/*hide*/false) warpedImage = Mat::zeros(resolution, CV_8UC3);
-    else if (warp) {
-        /*Mat warpOnly;
-        warpPerspective(img, warpOnly, getHomography(), resolution);
-        imwrite(path + "warping.png", warpOnly); */
-        Mat intensityCorrectedImage;
-        applyContributionMatrix(img, intensityCorrectedImage);
-        //imwrite(path + "contribution.png", intensityCorrectedImage);
-        warpPerspective(intensityCorrectedImage, warpedImage, getHomography(), resolution);
-        // Flip horizontally
-        flip(warpedImage, warpedImage, 1);
+    // Optionally save warping steps results
+    if (save) {
+        std::string path = "RenderTests/Projector" + std::to_string(params.id);
+        imwrite(path + "contribution.png", intensityCorrectedImage);
+        imwrite(path + "result.png", warpedImage);
     }
-    //imwrite(path + "result.png", warpedImage);
+
+    return warpedImage;
+}
+
+// ---------------------- OPENGL FUNCTIONS ------------------------------
+void ProjectorConfig::projectImage(Mat img, bool warp) {
+    Mat warpedImage = img.clone();
+
+    if (warp) {
+        warpedImage = warpImage(img);
+    }
+
+    // Flip vertically
+    flip(warpedImage, warpedImage, 0);
 
     // Create projector window
     glfwMakeContextCurrent(window);
@@ -342,12 +354,18 @@ void ProjectorConfig::projectImage(const Mat &img, bool warp) {
 
 void ProjectorConfig::projectImage(ProjectorConfig* projectors, uint count, const Mat& img) {
     bool shouldClose = false;
+    // The static way, warp images for each projector beforehand
+    Mat* images = new Mat[count];
+    for (int i = 0; i < count; i++) {
+        images[i] = projectors[i].warpImage(img, true);
+    }
     while (!shouldClose) {
         for (int i = 0; i < count; i++) {
+            projectors[i].projectImage(images[i], false);
             if (projectors[i].shouldClose) shouldClose = true;
-            projectors[i].projectImage(img, true);
         }
     }
+    delete[] images;
 }
 
 bool ProjectorConfig::initWindow(GLFWwindow* shared) {
