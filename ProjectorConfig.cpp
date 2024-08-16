@@ -5,6 +5,7 @@
 #include "ProjectorConfig.h"
 
 VideoCapture ProjectorConfig::camera;
+Mat ProjectorConfig::brightnessMap;
 uint ProjectorConfig::CAMWIDTH, ProjectorConfig::CAMHEIGHT;
 unsigned int ProjectorConfig::VAO;
 unsigned int ProjectorConfig::EBO;
@@ -354,18 +355,19 @@ void ProjectorConfig::projectImage(Mat img, bool warp) {
 
 void ProjectorConfig::projectImage(ProjectorConfig* projectors, uint count, const Mat& img) {
     bool shouldClose = false;
+    /*
     // The static way, warp images for each projector beforehand
     Mat* images = new Mat[count];
     for (int i = 0; i < count; i++) {
         images[i] = projectors[i].warpImage(img, true);
-    }
+    }*/
     while (!shouldClose) {
         for (int i = 0; i < count; i++) {
-            projectors[i].projectImage(images[i], false);
+            projectors[i].projectImage(img, false);
             if (projectors[i].shouldClose) shouldClose = true;
         }
     }
-    delete[] images;
+    //delete[] images;
 }
 
 bool ProjectorConfig::initWindow(GLFWwindow* shared) {
@@ -618,5 +620,27 @@ void ProjectorConfig::applyContributionMatrix(const Mat& img, Mat& result) {
     }
     // Merge transformed channels back together
     merge(channels, result);
+}
+
+void ProjectorConfig::computeBrightnessMap(ProjectorConfig *projectors, int count) {
+    // Capture image with white from all projectors
+    cv::Mat whiteImg = cv::Mat(CAMHEIGHT, CAMWIDTH, CV_8UC3, cv::Scalar(255, 255, 255));
+    for (int i = 0; i < count; i++) {
+        projectors[i].projectImage(whiteImg, false);
+    }
+    waitKey(5000);
+    auto whiteCaptured = getCameraImage(); // for some reason needs to be "flushed" once
+    whiteCaptured = getCameraImage();
+    imshow("White Maximum All Projectors", whiteCaptured);
+    waitKey(0);
+    Mat grayScale;
+    cvtColor(whiteCaptured, grayScale, COLOR_BGR2GRAY);
+    imwrite("BrightnessMap/grayscale.png", grayScale);
+    // Apply low-pass filter to get the map above specified brightness
+    const uint MIN_BRIGHTNESS = 150;
+    Mat filtered;
+    threshold(grayScale, filtered, MIN_BRIGHTNESS, 255, THRESH_TOZERO);
+    imwrite("BrightnessMap/filtered.png", filtered);
+    brightnessMap = filtered;
 }
 

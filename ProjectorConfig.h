@@ -63,6 +63,7 @@ public:
     static void initCamera();
     static void computeContributions(ProjectorConfig* projectors, int count);
     static void projectImage(ProjectorConfig* projectors, uint count, const Mat& img);
+    static void computeBrightnessMap(ProjectorConfig* projectors, int count);
     bool shouldClose;
     // Generates the graycode pattern object and images to be projected
     void generateGraycodes();
@@ -86,6 +87,7 @@ public:
 private:
     bool hide = false;
     static VideoCapture camera;
+    static Mat brightnessMap;
     // GLFW Window
     GLFWwindow* window;
     // Shared OpenGL resources
