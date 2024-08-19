@@ -17,18 +17,12 @@ int main()
     projectors[1] = ProjectorConfig(2, projectors);
     projectors[2] = ProjectorConfig(3, projectors);
 
-    ProjectorConfig::computeBrightnessMap(projectors, PROJECTORCOUNT);
-
-    delete[] projectors;
-    glfwTerminate();
-    return 0;
-
     // Calibrate/load projector configurations
     for (int i = 0; i < PROJECTORCOUNT; i++) {
 
         // Load an existing configuration from folder "captured<i>"
-        projectors[i].loadConfiguration();
-        continue;
+        //projectors[i].loadConfiguration();
+        //continue;
 
         // -------------- CALIBRATE NEW CONFIGURATION ----------------
 
@@ -51,10 +45,10 @@ int main()
         std::cout << " Calibration finished." << std::endl;
 
         // After last configuration, compute contributions
-        if (i == PROJECTORCOUNT-1) {
+        /*if (i == PROJECTORCOUNT-1) {
             std::cout << "Computing individual contributions..." << std::endl;
             ProjectorConfig::computeContributions(projectors, PROJECTORCOUNT);
-        }
+        }*/
     }
 
     // Close windows opened while calibrating

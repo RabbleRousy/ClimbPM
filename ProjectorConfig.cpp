@@ -308,15 +308,15 @@ Mat ProjectorConfig::warpImage(Mat img, bool save) {
     // Flip horizontally
     flip(img, warpedImage, 1);
     // Apply intensity according to each projector pixel's contribution
-    Mat intensityCorrectedImage;
-    applyContributionMatrix(warpedImage, intensityCorrectedImage);
+    //Mat intensityCorrectedImage;
+    //applyContributionMatrix(warpedImage, intensityCorrectedImage);
     // Warp from camera space to projector space using the homography matrix
-    warpPerspective(intensityCorrectedImage, warpedImage, getHomography(), resolution);
+    warpPerspective(warpedImage, warpedImage, getHomography(), resolution);
 
     // Optionally save warping steps results
     if (save) {
         std::string path = "RenderTests/Projector" + std::to_string(params.id);
-        imwrite(path + "contribution.png", intensityCorrectedImage);
+        //imwrite(path + "contribution.png", intensityCorrectedImage);
         imwrite(path + "result.png", warpedImage);
     }
 
@@ -355,19 +355,18 @@ void ProjectorConfig::projectImage(Mat img, bool warp) {
 
 void ProjectorConfig::projectImage(ProjectorConfig* projectors, uint count, const Mat& img) {
     bool shouldClose = false;
-    /*
     // The static way, warp images for each projector beforehand
     Mat* images = new Mat[count];
     for (int i = 0; i < count; i++) {
         images[i] = projectors[i].warpImage(img, true);
-    }*/
+    }
     while (!shouldClose) {
         for (int i = 0; i < count; i++) {
-            projectors[i].projectImage(img, false);
+            projectors[i].projectImage(images[i], false);
             if (projectors[i].shouldClose) shouldClose = true;
         }
     }
-    //delete[] images;
+    delete[] images;
 }
 
 bool ProjectorConfig::initWindow(GLFWwindow* shared) {
