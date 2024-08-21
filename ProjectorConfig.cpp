@@ -4,6 +4,7 @@
 
 #include "ProjectorConfig.h"
 
+// --------- STATIC MEMBERS ---------------
 VideoCapture ProjectorConfig::camera;
 Mat ProjectorConfig::brightnessMap;
 uint ProjectorConfig::CAMWIDTH, ProjectorConfig::CAMHEIGHT;
@@ -12,6 +13,158 @@ unsigned int ProjectorConfig::EBO;
 unsigned int ProjectorConfig::VBO;
 unsigned int ProjectorConfig::shader;
 GLuint ProjectorConfig::texture;
+
+// ------------------------------------------------------------
+// ------------ STATIC FUNCTIONS (PUBLIC) ---------------------
+// ------------------------------------------------------------
+
+bool ProjectorConfig::initGLFW() {
+    glfwSetErrorCallback(errorCallback);
+    if (!glfwInit())
+        return false;
+
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // For macOS compatibility
+
+    return true;
+}
+
+void ProjectorConfig::initCamera() {
+    camera = VideoCapture(0, CAP_DSHOW);
+    assert(camera.isOpened());
+    auto testImg = getCameraImage();
+    CAMHEIGHT = testImg.rows;
+    CAMWIDTH = testImg.cols;
+}
+
+void ProjectorConfig::computeContributions(ProjectorConfig *projectors, int count) {
+    // Initialize 2 dimensional arrays for contribution matrix
+    for (int i = 0; i < count; i++) {
+        projectors[i].contributionMatrix = Mat_<float>(CAMHEIGHT, CAMWIDTH);
+    }
+
+    // CAREFUL! Looping over C2PList assumes they are all in the same order, CONFIRM THIS!! -> confirmed
+    for (int pxl = 0; pxl < projectors[0].c2pList.size(); pxl++) {
+        uint contributorsCount = 0;
+        uint whiteAcc = 0.0f;
+        Point pixel(projectors[0].c2pList[pxl].cx, projectors[0].c2pList[pxl].cy);
+        // Loop over all projectors and check if they contribute to the pixel
+        for (int i = 0; i < count; i++) {
+            if (projectors[i].c2pList[pxl].px + projectors[i].c2pList[pxl].py != 0) {
+                // This projector contributes to the camera pixel
+                whiteAcc += projectors[i].white.at<cv::uint8_t>(pixel.y, pixel.x);
+            }
+        }
+
+        // Loop over all projectors and set the pixel's contribution value
+        for (int i = 0; i < count; i++) {
+            float contribution = 0.0f;
+            if ((whiteAcc > 0) && (projectors[i].c2pList[pxl].px + projectors[i].c2pList[pxl].py != 0)) {
+                contribution = float(projectors[i].white.at<cv::uint8_t>(pixel.y, pixel.x)) / whiteAcc;
+            }
+            projectors[i].contributionMatrix.at<float>(pixel.y, pixel.x) = contribution;
+        }
+    }
+
+    // Save visualizations
+    for (int i = 0; i < count; i++) {
+        Mat viz;
+        projectors[i].contributionMatrix.convertTo(viz, CV_8UC1, 255.0);
+        imwrite("captured" + std::to_string(projectors[i].params.id) + "/contribution.png", viz);
+    }
+}
+
+void ProjectorConfig::projectImage(ProjectorConfig* projectors, uint count, const Mat& img) {
+    bool shouldClose = false;
+    // The static way, warp images for each projector beforehand
+    Mat* images = new Mat[count];
+    for (int i = 0; i < count; i++) {
+        images[i] = projectors[i].warpImage(img, true);
+    }
+    while (!shouldClose) {
+        for (int i = 0; i < count; i++) {
+            projectors[i].projectImage(images[i], false);
+            if (projectors[i].wantsToClose()) shouldClose = true;
+        }
+    }
+    delete[] images;
+}
+
+void ProjectorConfig::computeBrightnessMap(ProjectorConfig *projectors, int count) {
+    // Capture image with white from all projectors
+    cv::Mat whiteImg = cv::Mat(CAMHEIGHT, CAMWIDTH, CV_8UC3, cv::Scalar(255, 255, 255));
+    for (int i = 0; i < count; i++) {
+        projectors[i].projectImage(whiteImg, false);
+    }
+    waitKey(5000);
+    auto whiteCaptured = getCameraImage(); // for some reason needs to be "flushed" once
+    whiteCaptured = getCameraImage();
+    imshow("White Maximum All Projectors", whiteCaptured);
+    waitKey(0);
+    Mat grayScale;
+    cvtColor(whiteCaptured, grayScale, COLOR_BGR2GRAY);
+    imwrite("BrightnessMap/grayscale.png", grayScale);
+    // Apply low-pass filter to get the map above specified brightness
+    const uint MIN_BRIGHTNESS = 150;
+    Mat filtered;
+    threshold(grayScale, filtered, MIN_BRIGHTNESS, 255, THRESH_TOZERO);
+    imwrite("BrightnessMap/filtered.png", filtered);
+    brightnessMap = filtered;
+}
+
+// ------------------------------------------------------------
+// ------------ STATIC FUNCTIONS (PRIVATE) --------------------
+// ------------------------------------------------------------
+
+void ProjectorConfig::getProjectionBoundaries(int count, int &minX, int &minY, int &maxX, int &maxY) {
+    Mat resultsCombined = Mat::zeros(CAMHEIGHT, CAMWIDTH, CV_8UC3);
+    for (int i = 0; i < count; i++) {
+        Mat result = imread("captured" + std::to_string(i+1) + "/result.png", IMREAD_COLOR);
+        resultsCombined += result;
+    }
+    imshow("All Results", resultsCombined);
+    waitKey(0);
+
+    // Scan columns from left
+    for (minX = 0; minX < resultsCombined.cols; minX++) {
+        if (!resultsCombined.col(minX).empty()) break;
+    }
+    // Scan columns from right
+    for (maxX = resultsCombined.cols-1; maxX >= 0; maxX--) {
+        if (!resultsCombined.col(maxX).empty()) break;
+    }
+    // Scan rows from bottom
+    for (minY = 0; minY < resultsCombined.rows; minY++) {
+        if (!resultsCombined.row(minY).empty()) break;
+    }
+    // Scan rows from top
+    for (maxY = resultsCombined.rows-1; maxY >= 0; maxY--) {
+        if (!resultsCombined.row(maxY).empty()) break;
+    }
+}
+
+void ProjectorConfig::errorCallback(int error, const char* description) {
+    std::cerr << "GLFW Error (" << error << "): " << description << std::endl;
+}
+
+void ProjectorConfig::keyCallback(GLFWwindow *window, int key, int scandone, int action, int mods) {
+    if (action != GLFW_PRESS) return;
+
+    if (key == GLFW_KEY_ESCAPE)
+        glfwSetWindowShouldClose(window, GLFW_TRUE);
+}
+
+Mat ProjectorConfig::getCameraImage() {
+    Mat image;
+    camera.read(image);
+    return image.clone();
+}
+
+// ------------------------------------------------------------
+// ------------ MEMBER FUNCTIONS (PUBLIC) ---------------------
+// ------------------------------------------------------------
 
 void ProjectorConfig::generateGraycodes() {
     // Create pattern object
@@ -31,20 +184,6 @@ void ProjectorConfig::generateGraycodes() {
     graycodes.push_back(blackCode);
     graycodes.push_back(whiteCode);
     std::cout << "Generated 2 more (fully black and white) patterns!" << std::endl;
-}
-
-void ProjectorConfig::initCamera() {
-    camera = VideoCapture(0, CAP_DSHOW);
-    assert(camera.isOpened());
-    auto testImg = getCameraImage();
-    CAMHEIGHT = testImg.rows;
-    CAMWIDTH = testImg.cols;
-}
-
-Mat ProjectorConfig::getCameraImage() {
-    Mat image;
-    camera.read(image);
-    return image.clone();
 }
 
 void ProjectorConfig::captureGraycodes() {
@@ -200,6 +339,118 @@ Mat ProjectorConfig::decodeGraycode() {
     return viz;
 }
 
+Mat ProjectorConfig::getHomography() {
+    if (homography.empty())
+        computeHomography();
+    return homography;
+}
+
+Mat ProjectorConfig::warpImage(Mat img, bool save) {
+    Size resolution(params.width, params.height);
+    Mat warpedImage;
+    // Flip horizontally
+    flip(img, warpedImage, 1);
+    // Apply intensity according to each projector pixel's contribution
+    //Mat intensityCorrectedImage;
+    //applyContributionMatrix(warpedImage, intensityCorrectedImage);
+    // Warp from camera space to projector space using the homography matrix
+    warpPerspective(warpedImage, warpedImage, getHomography(), resolution);
+
+    // Optionally save warping steps results
+    if (save) {
+        std::string path = "RenderTests/Projector" + std::to_string(params.id);
+        //imwrite(path + "contribution.png", intensityCorrectedImage);
+        imwrite(path + "result.png", warpedImage);
+    }
+
+    return warpedImage;
+}
+
+void ProjectorConfig::projectImage(Mat img, bool warp) {
+    Mat warpedImage = img.clone();
+
+    if (warp) {
+        warpedImage = warpImage(img);
+    }
+
+    // Flip vertically
+    flip(warpedImage, warpedImage, 0);
+
+    // Create projector window
+    glfwMakeContextCurrent(window);
+
+    // Upload the image to the texture
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, warpedImage.cols, warpedImage.rows, 0, GL_BGR, GL_UNSIGNED_BYTE, warpedImage.ptr());
+    // Render
+    glClear(GL_COLOR_BUFFER_BIT);
+    glUseProgram(shader);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glBindVertexArray(VAO);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+
+    // Swap front and back buffers
+    glfwSwapBuffers(window);
+    glfwPollEvents();
+    // Queried by managing application
+    shouldClose = glfwWindowShouldClose(window);
+}
+
+void ProjectorConfig::visualizeContribution() {
+    // For testing: visualize contribution
+    Mat viz;
+    contributionMatrix.convertTo(viz, CV_8UC1, 255.0);
+    imshow("Contribution Projector" + std::to_string(params.id), viz);
+    waitKey(0);
+}
+
+void ProjectorConfig::loadConfiguration() {
+    loadGraycodes();
+    loadC2Plist();
+    //loadContribution();
+}
+
+void ProjectorConfig::applyAreaMask() {
+    Mat mask = computeProjectorAreaMask(white);
+    // Convert C2P to matrix
+    Mat c2pMat = Mat::zeros(CAMHEIGHT, CAMWIDTH, CV_8UC3);
+    for (int i = 0; i < c2pList.size(); i++) {
+        auto c2p = c2pList.at(i);
+        c2pMat.at<Vec3b>(c2p.cy, c2p.cx)[0] = ((float)c2p.px / params.width) * 255;
+        c2pMat.at<Vec3b>(c2p.cy, c2p.cx)[1] = ((float)c2p.py / params.height) * 255;
+    }
+
+    // Apply mask
+    Mat result;
+    c2pMat.copyTo(result, mask);
+    imshow("Masked", result);
+    waitKey(0);
+
+    // Save back into c2p list
+    c2pList.clear();
+    for (int x = 0; x < CAMWIDTH; x++) {
+        for (int y = 0; y < CAMHEIGHT; y++) {
+            int px = result.at<Vec3b>(y,x)[0];
+            int py = result.at<Vec3b>(y,x)[1];
+            px = ((float)px / 255) * params.width;
+            py = ((float)py / 255) * params.height;
+            c2pList.emplace_back(x, y, px, py);
+        }
+    }
+
+    // Save both to disk
+    std::ofstream os("captured" + std::to_string(params.id) + "/c2p.csv");
+    for (C2P elem : c2pList) {
+        os << elem.cx << ", " << elem.cy << ", " << elem.px << ", " << elem.py << std::endl;
+    }
+    os.close();
+    if (!imwrite("captured" + std::to_string(params.id) + "/result.png", result))
+        std::cerr << "Error saving result image!" << std::endl;
+}
+
+// ------------------------------------------------------------
+// ------------ MEMBER FUNCTIONS (PRIVATE) ---------------------
+// ------------------------------------------------------------
+
 Mat ProjectorConfig::loadC2Plist() {
     std::ifstream file("captured" + std::to_string(params.id) + "/c2p.csv");
     std::string line;
@@ -241,12 +492,6 @@ void ProjectorConfig::loadContribution() {
     contributionVisualization.convertTo(contributionMatrix, CV_32FC1, 1.0f/255.0f);
 }
 
-void ProjectorConfig::loadConfiguration() {
-    loadGraycodes();
-    loadC2Plist();
-    //loadContribution();
-}
-
 Mat ProjectorConfig::reduceCalibrationNoise(const Mat& calib) {
     Mat eroded, dilated;
     int morphSize = 1;
@@ -259,12 +504,6 @@ Mat ProjectorConfig::reduceCalibrationNoise(const Mat& calib) {
     cv::dilate(calib, dilated, kernelSize3);
     cv::erode(dilated, eroded, kernelSize2);
     return eroded;
-}
-
-Mat ProjectorConfig::getHomography() {
-    if (homography.empty())
-        computeHomography();
-    return homography;
 }
 
 void ProjectorConfig::computeHomography() {
@@ -285,96 +524,6 @@ void ProjectorConfig::computeHomography() {
     homography = findHomography(cameraPoints, projectorPoints, RANSAC);
     std::cout << "Homography Matrix computed:\n" << homography << std::endl;
     std::cout << "Determinant: " << determinant(homography) << std::endl;
-}
-
-// ----------------------- CONSTRUCTORS --------------------------------------------
-ProjectorConfig::ProjectorConfig() : params(ProjectorParams()), window(nullptr), shouldClose(false) {}
-
-ProjectorConfig::ProjectorConfig(ProjectorParams p) : params(p), window(nullptr), shouldClose(false) {}
-
-ProjectorConfig::ProjectorConfig(uint id, const ProjectorConfig* shared) : window(nullptr), shouldClose(false) {
-    int count;
-    auto monitors = glfwGetMonitors(&count);
-    if (id >= count) {
-        std::cerr << "Tried initializing projector with ID " << id << ", but that monitor does not exist!" << std::endl;
-    }
-
-    GLFWmonitor* monitor = monitors[id];
-    const GLFWvidmode* vidMode = glfwGetVideoMode(monitor);
-    int xPos, yPos;
-    glfwGetMonitorPos(monitor, &xPos, &yPos);
-    params = ProjectorParams(id, vidMode->width, vidMode->height, xPos, yPos);
-    std::cout << "Creating full screen window on monitor #" << id << " (" << vidMode->width << " x " << vidMode->height << " px) at "
-              << xPos << "/" << yPos << std::endl;
-
-    initWindow((shared == nullptr) ? nullptr : shared->window);
-}
-
-Mat ProjectorConfig::warpImage(Mat img, bool save) {
-    Size resolution(params.width, params.height);
-    Mat warpedImage;
-    // Flip horizontally
-    flip(img, warpedImage, 1);
-    // Apply intensity according to each projector pixel's contribution
-    //Mat intensityCorrectedImage;
-    //applyContributionMatrix(warpedImage, intensityCorrectedImage);
-    // Warp from camera space to projector space using the homography matrix
-    warpPerspective(warpedImage, warpedImage, getHomography(), resolution);
-
-    // Optionally save warping steps results
-    if (save) {
-        std::string path = "RenderTests/Projector" + std::to_string(params.id);
-        //imwrite(path + "contribution.png", intensityCorrectedImage);
-        imwrite(path + "result.png", warpedImage);
-    }
-
-    return warpedImage;
-}
-
-// ---------------------- OPENGL FUNCTIONS ------------------------------
-void ProjectorConfig::projectImage(Mat img, bool warp) {
-    Mat warpedImage = img.clone();
-
-    if (warp) {
-        warpedImage = warpImage(img);
-    }
-
-    // Flip vertically
-    flip(warpedImage, warpedImage, 0);
-
-    // Create projector window
-    glfwMakeContextCurrent(window);
-
-    // Upload the image to the texture
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, warpedImage.cols, warpedImage.rows, 0, GL_BGR, GL_UNSIGNED_BYTE, warpedImage.ptr());
-    // Render
-    glClear(GL_COLOR_BUFFER_BIT);
-    glUseProgram(shader);
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glBindVertexArray(VAO);
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-
-    // Swap front and back buffers
-    glfwSwapBuffers(window);
-    glfwPollEvents();
-    // Queried by managing application
-    shouldClose = glfwWindowShouldClose(window);
-}
-
-void ProjectorConfig::projectImage(ProjectorConfig* projectors, uint count, const Mat& img) {
-    bool shouldClose = false;
-    // The static way, warp images for each projector beforehand
-    Mat* images = new Mat[count];
-    for (int i = 0; i < count; i++) {
-        images[i] = projectors[i].warpImage(img, true);
-    }
-    while (!shouldClose) {
-        for (int i = 0; i < count; i++) {
-            projectors[i].projectImage(images[i], false);
-            if (projectors[i].shouldClose) shouldClose = true;
-        }
-    }
-    delete[] images;
 }
 
 bool ProjectorConfig::initWindow(GLFWwindow* shared) {
@@ -427,6 +576,63 @@ bool ProjectorConfig::initWindow(GLFWwindow* shared) {
 
     return true;
 }
+
+void ProjectorConfig::applyContributionMatrix(const Mat& img, Mat& result) {
+    // Split image into color channels
+    std::vector<Mat> channels(3);
+    split(img, channels);
+
+    // Apply contributionMatrix to each channel
+    for (auto& channel : channels) {
+        // Convert to float for multiplication
+        channel.convertTo(channel, CV_32F);
+        multiply(channel, contributionMatrix, channel);
+        // Convert back
+        channel.convertTo(channel, CV_8U);
+    }
+    // Merge transformed channels back together
+    merge(channels, result);
+}
+
+Mat ProjectorConfig::computeProjectorAreaMask(const Mat &whiteImg) {
+    // Parameter values were only tailored for specific use-case!
+    Mat edges;
+    cv::Canny(whiteImg, edges, 5, 500);
+    Mat dilated;
+    cv::dilate(edges, dilated, cv::Mat(), cv::Point(-1, -1), 55);
+    Mat eroded;
+    cv::erode(dilated, eroded, Mat(), Point(-1,-1), 55);
+    return eroded;
+}
+
+// ------------------------------------------------------------
+// ------------------------- CONSTRUCTORS ---------------------
+// ------------------------------------------------------------
+ProjectorConfig::ProjectorConfig() : params(ProjectorParams()), window(nullptr), shouldClose(false) {}
+
+ProjectorConfig::ProjectorConfig(ProjectorParams p) : params(p), window(nullptr), shouldClose(false) {}
+
+ProjectorConfig::ProjectorConfig(uint id, const ProjectorConfig* shared) : window(nullptr), shouldClose(false) {
+    int count;
+    auto monitors = glfwGetMonitors(&count);
+    if (id >= count) {
+        std::cerr << "Tried initializing projector with ID " << id << ", but that monitor does not exist!" << std::endl;
+    }
+
+    GLFWmonitor* monitor = monitors[id];
+    const GLFWvidmode* vidMode = glfwGetVideoMode(monitor);
+    int xPos, yPos;
+    glfwGetMonitorPos(monitor, &xPos, &yPos);
+    params = ProjectorParams(id, vidMode->width, vidMode->height, xPos, yPos);
+    std::cout << "Creating full screen window on monitor #" << id << " (" << vidMode->width << " x " << vidMode->height << " px) at "
+              << xPos << "/" << yPos << std::endl;
+
+    initWindow((shared == nullptr) ? nullptr : shared->window);
+}
+
+// ------------------------------------------------------------
+// ------- OPENGL HELPER FUNCTIONS (PRIVATE) ------------------
+// ------------------------------------------------------------
 
 unsigned int ProjectorConfig::createVertexBuffer() {
     // Vertex data in 3D normalized device coordinates (-1,1)
@@ -535,195 +741,3 @@ unsigned int ProjectorConfig::createShaderProgram() {
     glDeleteShader(fragmentShader);
     return shaderProgram;
 }
-
-bool ProjectorConfig::initGLFW() {
-    glfwSetErrorCallback(errorCallback);
-    if (!glfwInit())
-        return false;
-
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // For macOS compatibility
-
-    return true;
-}
-
-void ProjectorConfig::errorCallback(int error, const char* description) {
-    std::cerr << "GLFW Error (" << error << "): " << description << std::endl;
-}
-
-// TODO: Rework to set a publicly retrievable lastKeyCode
-void ProjectorConfig::keyCallback(GLFWwindow *window, int key, int scandone, int action, int mods) {
-    if (action != GLFW_PRESS) return;
-
-    auto myConfig = static_cast<ProjectorConfig*>(glfwGetWindowUserPointer(window));
-
-    if (key == GLFW_KEY_ESCAPE)
-        glfwSetWindowShouldClose(window, GLFW_TRUE);
-    else if (key == myConfig->params.id + 48) { // GLFW_KEY_0 = 48 etc.
-        myConfig->hide = !myConfig->hide;
-        std::cout << (myConfig->hide ? "Hide" : "Show") << " Projector " << myConfig->params.id << "!" << std::endl;
-    }
-}
-
-void ProjectorConfig::computeContributions(ProjectorConfig *projectors, int count) {
-    // Initialize 2 dimensional arrays for contribution matrix
-    for (int i = 0; i < count; i++) {
-        projectors[i].contributionMatrix = Mat_<float>(CAMHEIGHT, CAMWIDTH);
-    }
-
-    // CAREFUL! Looping over C2PList assumes they are all in the same order, CONFIRM THIS!!
-    for (int pxl = 0; pxl < projectors[0].c2pList.size(); pxl++) {
-        uint contributorsCount = 0;
-        uint whiteAcc = 0.0f;
-        Point pixel(projectors[0].c2pList[pxl].cx, projectors[0].c2pList[pxl].cy);
-        // Loop over all projectors and check if they contribute to the pixel
-        for (int i = 0; i < count; i++) {
-            if (projectors[i].c2pList[pxl].px + projectors[i].c2pList[pxl].py != 0) {
-                // This projector contributes to the camera pixel
-                whiteAcc += projectors[i].white.at<cv::uint8_t>(pixel.y, pixel.x);
-            }
-        }
-
-        // Loop over all projectors and set the pixel's contribution value
-        for (int i = 0; i < count; i++) {
-            float contribution = 0.0f;
-            if ((whiteAcc > 0) && (projectors[i].c2pList[pxl].px + projectors[i].c2pList[pxl].py != 0)) {
-                contribution = float(projectors[i].white.at<cv::uint8_t>(pixel.y, pixel.x)) / whiteAcc;
-            }
-            projectors[i].contributionMatrix.at<float>(pixel.y, pixel.x) = contribution;
-        }
-    }
-
-    // Save visualizations
-    for (int i = 0; i < count; i++) {
-        Mat viz;
-        projectors[i].contributionMatrix.convertTo(viz, CV_8UC1, 255.0);
-        imwrite("captured" + std::to_string(projectors[i].params.id) + "/contribution.png", viz);
-    }
-}
-
-void ProjectorConfig::visualizeContribution() {
-    // For testing: visualize contribution
-    Mat viz;
-    contributionMatrix.convertTo(viz, CV_8UC1, 255.0);
-    imshow("Contribution Projector" + std::to_string(params.id), viz);
-    waitKey(0);
-}
-
-void ProjectorConfig::applyContributionMatrix(const Mat& img, Mat& result) {
-    // Split image into color channels
-    std::vector<Mat> channels(3);
-    split(img, channels);
-
-    // Apply contributionMatrix to each channel
-    for (auto& channel : channels) {
-        // Convert to float for multiplication
-        channel.convertTo(channel, CV_32F);
-        multiply(channel, contributionMatrix, channel);
-        // Convert back
-        channel.convertTo(channel, CV_8U);
-    }
-    // Merge transformed channels back together
-    merge(channels, result);
-}
-
-void ProjectorConfig::computeBrightnessMap(ProjectorConfig *projectors, int count) {
-    // Capture image with white from all projectors
-    cv::Mat whiteImg = cv::Mat(CAMHEIGHT, CAMWIDTH, CV_8UC3, cv::Scalar(255, 255, 255));
-    for (int i = 0; i < count; i++) {
-        projectors[i].projectImage(whiteImg, false);
-    }
-    waitKey(5000);
-    auto whiteCaptured = getCameraImage(); // for some reason needs to be "flushed" once
-    whiteCaptured = getCameraImage();
-    imshow("White Maximum All Projectors", whiteCaptured);
-    waitKey(0);
-    Mat grayScale;
-    cvtColor(whiteCaptured, grayScale, COLOR_BGR2GRAY);
-    imwrite("BrightnessMap/grayscale.png", grayScale);
-    // Apply low-pass filter to get the map above specified brightness
-    const uint MIN_BRIGHTNESS = 150;
-    Mat filtered;
-    threshold(grayScale, filtered, MIN_BRIGHTNESS, 255, THRESH_TOZERO);
-    imwrite("BrightnessMap/filtered.png", filtered);
-    brightnessMap = filtered;
-}
-
-Mat ProjectorConfig::computeProjectorAreaMask(const Mat &whiteImg) {
-    // Parameter values were only tailored for specific use-case!
-    Mat edges;
-    cv::Canny(whiteImg, edges, 5, 500);
-    Mat dilated;
-    cv::dilate(edges, dilated, cv::Mat(), cv::Point(-1, -1), 55);
-    Mat eroded;
-    cv::erode(dilated, eroded, Mat(), Point(-1,-1), 55);
-    return eroded;
-}
-
-void ProjectorConfig::applyAreaMask() {
-    Mat mask = computeProjectorAreaMask(white);
-    // Convert C2P to matrix
-    Mat c2pMat = Mat::zeros(CAMHEIGHT, CAMWIDTH, CV_8UC3);
-    for (int i = 0; i < c2pList.size(); i++) {
-        auto c2p = c2pList.at(i);
-        c2pMat.at<Vec3b>(c2p.cy, c2p.cx)[0] = ((float)c2p.px / params.width) * 255;
-        c2pMat.at<Vec3b>(c2p.cy, c2p.cx)[1] = ((float)c2p.py / params.height) * 255;
-    }
-
-    // Apply mask
-    Mat result;
-    c2pMat.copyTo(result, mask);
-    imshow("Masked", result);
-    waitKey(0);
-
-    // Save back into c2p list
-    c2pList.clear();
-    for (int x = 0; x < CAMWIDTH; x++) {
-        for (int y = 0; y < CAMHEIGHT; y++) {
-            int px = result.at<Vec3b>(y,x)[0];
-            int py = result.at<Vec3b>(y,x)[1];
-            px = ((float)px / 255) * params.width;
-            py = ((float)py / 255) * params.height;
-            c2pList.emplace_back(x, y, px, py);
-        }
-    }
-
-    // Save both to disk
-    std::ofstream os("captured" + std::to_string(params.id) + "/c2p.csv");
-    for (C2P elem : c2pList) {
-        os << elem.cx << ", " << elem.cy << ", " << elem.px << ", " << elem.py << std::endl;
-    }
-    os.close();
-    if (!imwrite("captured" + std::to_string(params.id) + "/result.png", result))
-        std::cerr << "Error saving result image!" << std::endl;
-}
-
-void ProjectorConfig::getProjectionBoundaries(int count, int &minX, int &minY, int &maxX, int &maxY) {
-    Mat resultsCombined = Mat::zeros(CAMHEIGHT, CAMWIDTH, CV_8UC3);
-    for (int i = 0; i < count; i++) {
-        Mat result = imread("captured" + std::to_string(i+1) + "/result.png", IMREAD_COLOR);
-        resultsCombined += result;
-    }
-    imshow("All Results", resultsCombined);
-    waitKey(0);
-
-    // Scan columns from left
-    for (minX = 0; minX < resultsCombined.cols; minX++) {
-        if (!resultsCombined.col(minX).empty()) break;
-    }
-    // Scan columns from right
-    for (maxX = resultsCombined.cols-1; maxX >= 0; maxX--) {
-        if (!resultsCombined.col(maxX).empty()) break;
-    }
-    // Scan rows from bottom
-    for (minY = 0; minY < resultsCombined.rows; minY++) {
-        if (!resultsCombined.row(minY).empty()) break;
-    }
-    // Scan rows from top
-    for (maxY = resultsCombined.rows-1; maxY >= 0; maxY--) {
-        if (!resultsCombined.row(maxY).empty()) break;
-    }
-}
-

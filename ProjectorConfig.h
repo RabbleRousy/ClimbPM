@@ -18,8 +18,6 @@ namespace fs = std::__fs::filesystem;
 namespace fs = std::filesystem;
 #endif
 
-#define GRAYCODEWIDTHSTEP 50
-#define GRAYCODEHEIGHTSTEP 50
 #define WHITETHRESHOLD 80
 #define BLACKTHRESHOLD 20
 #define PATTERN_DELAY 5000
@@ -58,13 +56,18 @@ struct ProjectorParams {
 
 class ProjectorConfig {
 public:
+    // -------- STATIC VARIABLES ---------
     static uint CAMHEIGHT, CAMWIDTH;
+
+    // -------- STATIC FUNCTIONS ---------
     static bool initGLFW();
     static void initCamera();
     static void computeContributions(ProjectorConfig* projectors, int count);
     static void projectImage(ProjectorConfig* projectors, uint count, const Mat& img);
     static void computeBrightnessMap(ProjectorConfig* projectors, int count);
-    bool shouldClose;
+
+    // -------- MEMBER FUNCTIONS ------
+    bool wantsToClose() { return shouldClose; }
     // Generates the graycode pattern object and images to be projected
     void generateGraycodes();
     // Projects the graycode pattern and saves captured images
@@ -80,21 +83,32 @@ public:
     // Initializes the configuration from existing files
     void loadConfiguration();
     void applyAreaMask();
-    // CONSTRUCTORS
+
+    // ----- CONSTRUCTORS ----------
     ProjectorConfig();
     explicit ProjectorConfig(ProjectorParams p);
     explicit ProjectorConfig(uint id, const ProjectorConfig* shared = nullptr);
 
 private:
-    bool hide = false;
+    // ----- STATIC VARIABLES ------
     static VideoCapture camera;
-    static Mat brightnessMap;
-    // GLFW Window
-    GLFWwindow* window;
+    static Mat brightnessMap; // unused
     // Shared OpenGL resources
     static unsigned int EBO, VBO, VAO;
     static unsigned int shader;
     static GLuint texture;
+
+    // ------ STATIC FUNCTIONS ---------------------------
+    static void getProjectionBoundaries(int count, int& minX, int& minY, int& maxX, int& maxY); // unused
+    static void keyCallback(GLFWwindow* window, int key, int scandone, int action, int mods);
+    static void errorCallback(int error, const char* description);
+    static Mat getCameraImage();
+
+    // ----- MEMBER VARIABLES -------
+    // Whether our window wants to be close
+    bool shouldClose;
+    // GLFW Window
+    GLFWwindow* window;
     // Parameters of this projector
     ProjectorParams params;
     Ptr<structured_light::GrayCodePattern> pattern;
@@ -108,8 +122,10 @@ private:
     // Homography matrix computed from c2p list
     Mat homography;
     // Matrix containing the shared contribution to each pixel in camera space
-    Mat contributionMatrix;
-    void applyContributionMatrix(const Mat& img, Mat& result);
+    Mat contributionMatrix; // unused
+
+    // ------------ MEMBER FUNCTIONS -----------------------
+    void applyContributionMatrix(const Mat& img, Mat& result); // unused
     Mat reduceCalibrationNoise(const Mat& calib);
     void computeHomography();
     Mat computeProjectorAreaMask(const Mat& whiteImg);
@@ -118,11 +134,8 @@ private:
     // Loads contribution matrix from file
     void loadContribution();
     bool initWindow(GLFWwindow* shared = nullptr);
-    static void getProjectionBoundaries(int count, int& minX, int& minY, int& maxX, int& maxY);
-    static void keyCallback(GLFWwindow* window, int key, int scandone, int action, int mods);
-    static void errorCallback(int error, const char* description);
-    static Mat getCameraImage();
-    // ------- OpenGL Helper Functions ----------
+
+    // ------- OPENGL HELPER FUNCTIONS ----------
     unsigned int createVertexBuffer();
     unsigned int createElementBuffer();
     unsigned int createVertexArray(unsigned int vertexBuffer, unsigned int elementBuffer);
