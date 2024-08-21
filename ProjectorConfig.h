@@ -118,6 +118,7 @@ private:
     // Loads contribution matrix from file
     void loadContribution();
     bool initWindow(GLFWwindow* shared = nullptr);
+    static void getProjectionBoundaries(int count, int& minX, int& minY, int& maxX, int& maxY);
     static void keyCallback(GLFWwindow* window, int key, int scandone, int action, int mods);
     static void errorCallback(int error, const char* description);
     static Mat getCameraImage();

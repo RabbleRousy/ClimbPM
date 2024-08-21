@@ -362,10 +362,6 @@ void ProjectorConfig::projectImage(Mat img, bool warp) {
 }
 
 void ProjectorConfig::projectImage(ProjectorConfig* projectors, uint count, const Mat& img) {
-
-    int minX, minY, maxX, maxY;
-    getProjectionAreaBoundaries(count, minX, minY, maxX, maxY);
-
     bool shouldClose = false;
     // The static way, warp images for each projector beforehand
     Mat* images = new Mat[count];
@@ -702,5 +698,32 @@ void ProjectorConfig::applyAreaMask() {
     os.close();
     if (!imwrite("captured" + std::to_string(params.id) + "/result.png", result))
         std::cerr << "Error saving result image!" << std::endl;
+}
+
+void ProjectorConfig::getProjectionBoundaries(int count, int &minX, int &minY, int &maxX, int &maxY) {
+    Mat resultsCombined = Mat::zeros(CAMHEIGHT, CAMWIDTH, CV_8UC3);
+    for (int i = 0; i < count; i++) {
+        Mat result = imread("captured" + std::to_string(i+1) + "/result.png", IMREAD_COLOR);
+        resultsCombined += result;
+    }
+    imshow("All Results", resultsCombined);
+    waitKey(0);
+
+    // Scan columns from left
+    for (minX = 0; minX < resultsCombined.cols; minX++) {
+        if (!resultsCombined.col(minX).empty()) break;
+    }
+    // Scan columns from right
+    for (maxX = resultsCombined.cols-1; maxX >= 0; maxX--) {
+        if (!resultsCombined.col(maxX).empty()) break;
+    }
+    // Scan rows from bottom
+    for (minY = 0; minY < resultsCombined.rows; minY++) {
+        if (!resultsCombined.row(minY).empty()) break;
+    }
+    // Scan rows from top
+    for (maxY = resultsCombined.rows-1; maxY >= 0; maxY--) {
+        if (!resultsCombined.row(maxY).empty()) break;
+    }
 }
 
