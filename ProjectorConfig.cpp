@@ -117,8 +117,16 @@ Mat ProjectorConfig::decodeGraycode() {
     Mat black = captured.back();
     captured.pop_back();
 
+    Mat whiteThresholded;
+    threshold(white, whiteThresholded, 200, 255, THRESH_TOZERO);
+
     // Stores the amount of light that reaches each pixel, that is not coming from this projectors light
-    Mat litByOthers = black - white;
+    Mat litByOthers = black - whiteThresholded;
+
+    for (auto & i : captured) {
+        i = i - litByOthers;
+    }
+    imwrite("captured" + std::to_string(params.id) + "/litByOthers.png", litByOthers);
 
     Mat viz = Mat::zeros(CAMHEIGHT, CAMWIDTH, CV_8UC3);
     c2pList = std::vector<C2P>();
@@ -129,7 +137,7 @@ Mat ProjectorConfig::decodeGraycode() {
         for (int x = 0; x < CAMWIDTH; x++) {
             cv::Point pixel;
             pxlCount++;
-            bool ambientLit = litByOthers.at<cv::uint8_t>(y, x) > 5;
+            bool ambientLit = litByOthers.at<cv::uint8_t>(y, x) > 0;
             if (ambientLit) ambientCount++;
             auto whiteValue = white.at<cv::uint8_t>(y, x);
             // Check white value for very bright pixels, as they would falsely be discarded by this check
@@ -236,7 +244,7 @@ void ProjectorConfig::loadContribution() {
 void ProjectorConfig::loadConfiguration() {
     loadGraycodes();
     loadC2Plist();
-    loadContribution();
+    //loadContribution();
 }
 
 Mat ProjectorConfig::reduceCalibrationNoise(const Mat& calib) {
@@ -641,5 +649,54 @@ void ProjectorConfig::computeBrightnessMap(ProjectorConfig *projectors, int coun
     threshold(grayScale, filtered, MIN_BRIGHTNESS, 255, THRESH_TOZERO);
     imwrite("BrightnessMap/filtered.png", filtered);
     brightnessMap = filtered;
+}
+
+Mat ProjectorConfig::computeProjectorAreaMask(const Mat &whiteImg) {
+    // Parameter values were only tailored for specific use-case!
+    Mat edges;
+    cv::Canny(whiteImg, edges, 5, 500);
+    Mat dilated;
+    cv::dilate(edges, dilated, cv::Mat(), cv::Point(-1, -1), 55);
+    Mat eroded;
+    cv::erode(dilated, eroded, Mat(), Point(-1,-1), 55);
+    return eroded;
+}
+
+void ProjectorConfig::applyAreaMask() {
+    Mat mask = computeProjectorAreaMask(white);
+    // Convert C2P to matrix
+    Mat c2pMat = Mat::zeros(CAMHEIGHT, CAMWIDTH, CV_8UC3);
+    for (int i = 0; i < c2pList.size(); i++) {
+        auto c2p = c2pList.at(i);
+        c2pMat.at<Vec3b>(c2p.cy, c2p.cx)[0] = ((float)c2p.px / params.width) * 255;
+        c2pMat.at<Vec3b>(c2p.cy, c2p.cx)[1] = ((float)c2p.py / params.height) * 255;
+    }
+
+    // Apply mask
+    Mat result;
+    c2pMat.copyTo(result, mask);
+    imshow("Masked", result);
+    waitKey(0);
+
+    // Save back into c2p list
+    c2pList.clear();
+    for (int x = 0; x < CAMWIDTH; x++) {
+        for (int y = 0; y < CAMHEIGHT; y++) {
+            int px = result.at<Vec3b>(y,x)[0];
+            int py = result.at<Vec3b>(y,x)[1];
+            px = ((float)px / 255) * params.width;
+            py = ((float)py / 255) * params.height;
+            c2pList.emplace_back(x, y, px, py);
+        }
+    }
+
+    // Save both to disk
+    std::ofstream os("captured" + std::to_string(params.id) + "/c2p.csv");
+    for (C2P elem : c2pList) {
+        os << elem.cx << ", " << elem.cy << ", " << elem.px << ", " << elem.py << std::endl;
+    }
+    os.close();
+    if (!imwrite("captured" + std::to_string(params.id) + "/result.png", result))
+        std::cerr << "Error saving result image!" << std::endl;
 }
 

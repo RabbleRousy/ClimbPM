@@ -9,13 +9,13 @@ int main()
 
     ProjectorConfig::initCamera();
 
-    const int PROJECTORCOUNT = 3;
+    const int PROJECTORCOUNT = 2;
     ProjectorConfig* projectors = new ProjectorConfig[PROJECTORCOUNT];
 
     // Define the projector configuration
     projectors[0] = ProjectorConfig(1);
     projectors[1] = ProjectorConfig(2, projectors);
-    projectors[2] = ProjectorConfig(3, projectors);
+    //projectors[2] = ProjectorConfig(3, projectors); // Homography not found
 
     // Calibrate/load projector configurations
     for (int i = 0; i < PROJECTORCOUNT; i++) {
@@ -43,12 +43,6 @@ int main()
         projectors[i].decodeGraycode();
 
         std::cout << " Calibration finished." << std::endl;
-
-        // After last configuration, compute contributions
-        /*if (i == PROJECTORCOUNT-1) {
-            std::cout << "Computing individual contributions..." << std::endl;
-            ProjectorConfig::computeContributions(projectors, PROJECTORCOUNT);
-        }*/
     }
 
     // Close windows opened while calibrating

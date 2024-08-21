@@ -22,7 +22,7 @@ namespace fs = std::filesystem;
 #define GRAYCODEHEIGHTSTEP 50
 #define WHITETHRESHOLD 80
 #define BLACKTHRESHOLD 20
-#define PATTERN_DELAY 3000
+#define PATTERN_DELAY 5000
 
 // Shader code (nothing fancy, basic texturing)
 #define VERTEXSHADERSOURCE "#version 330 core\nlayout (location = 0) in vec3 aPos;\nlayout (location = 1) in vec2 aTexCoord;\nout vec2 texCoord;\nvoid main()\n{\ngl_Position = vec4(aPos, 1.0);\ntexCoord = aTexCoord;\n}\0"
@@ -79,6 +79,7 @@ public:
     void visualizeContribution();
     // Initializes the configuration from existing files
     void loadConfiguration();
+    void applyAreaMask();
     // CONSTRUCTORS
     ProjectorConfig();
     explicit ProjectorConfig(ProjectorParams p);
@@ -111,6 +112,7 @@ private:
     void applyContributionMatrix(const Mat& img, Mat& result);
     Mat reduceCalibrationNoise(const Mat& calib);
     void computeHomography();
+    Mat computeProjectorAreaMask(const Mat& whiteImg);
     // Loads the C2P list from .csv file
     Mat loadC2Plist();
     // Loads contribution matrix from file
