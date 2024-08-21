@@ -362,6 +362,10 @@ void ProjectorConfig::projectImage(Mat img, bool warp) {
 }
 
 void ProjectorConfig::projectImage(ProjectorConfig* projectors, uint count, const Mat& img) {
+
+    int minX, minY, maxX, maxY;
+    getProjectionAreaBoundaries(count, minX, minY, maxX, maxY);
+
     bool shouldClose = false;
     // The static way, warp images for each projector beforehand
     Mat* images = new Mat[count];
